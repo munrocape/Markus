@@ -23,14 +23,6 @@ module MarkusConfigurator
     end
   end
 
-  def markus_config_pdf_storage
-    if defined? PDF_STORAGE
-      return PDF_STORAGE
-    else
-      return File.join(::Rails.root.to_s, "converted_pdf_dir")
-    end
-  end
-
   def markus_config_pdf_conv_memory_allowance
     if defined? PDF_CONV_MEMORY_ALLOWANCE
       return PDF_CONV_MEMORY_ALLOWANCE
@@ -39,11 +31,11 @@ module MarkusConfigurator
     end
   end
 
-  def markus_config_pdf_support
-    if defined? PDF_SUPPORT
-      return PDF_SUPPORT
+  def markus_config_max_file_size
+    if defined? MAX_FILE_SIZE
+      return MAX_FILE_SIZE
     else
-      return false
+      return 5000000
     end
   end
 
@@ -51,7 +43,7 @@ module MarkusConfigurator
     if defined? REPOSITORY_TYPE
       return REPOSITORY_TYPE
     else
-      return "svn"
+      return 'git'
     end
   end
 
@@ -59,7 +51,7 @@ module MarkusConfigurator
     if defined? REPOSITORY_EXTERNAL_BASE_URL
       return REPOSITORY_EXTERNAL_BASE_URL
     else
-      return "http://www.example.com/svn"
+      return 'http://www.example.com/git'
     end
   end
 
@@ -81,7 +73,7 @@ module MarkusConfigurator
     if defined? REPOSITORY_PERMISSION_FILE
       return REPOSITORY_PERMISSION_FILE
     else
-      return File.join(markus_config_repository_storage, "svn_authz")
+      return File.join(markus_config_repository_storage, 'git_auth')
     end
   end
 

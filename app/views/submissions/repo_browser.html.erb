@@ -1,13 +1,8 @@
 <% content_for :head do %>
   <%= javascript_include_tag 'jquery-ui-timepicker-addon' %>
   <%= stylesheet_link_tag 'common/jquery-ui', 'common/jquery-ui-timepicker-addon' %>
-  <%= javascript_include_tag 'FilterTable/FilterTable.js' %>
-  <%= javascript_include_tag 'repo_browser.js' %>
+  <%= render partial: 'repo_files_table', formats: [:'js.jsx'], handlers: [:erb] %>
 <% end %>
-
-<%= render partial: 'repo_browser_boot',
-           formats: [:js],
-           handlers: [:erb] %>
 
 <% if flash[:error] -%>
   <div class='error'>
@@ -23,10 +18,12 @@
   </h1>
 </div>
 
-<div class='wrapLeft'>
+<div class='wrapper'>
   <div id='repo_browser_controls'>
     <fieldset>
-      <legend><%= I18n.t('browse_submissions.find_different_revision') %></legend>
+      <legend>
+        <span><%= t('browse_submissions.find_different_revision') %></span>
+      </legend>
 
       <div id='find_revision_error' class='error' style='display:none;'></div>
 
@@ -41,7 +38,7 @@
                            l(@revision_timestamp, format: :long_date),
                            { class: 'datetimepicker',
                              size: 30 } %>
-        <%= submit_tag I18n.t('browse_submissions.find_by_revision_timestamp') %>
+        <%= submit_tag t('browse_submissions.find_by_revision_timestamp') %>
       <% end %>
 
       <%= form_tag repo_browser_assignment_submission_path(
@@ -55,49 +52,63 @@
                            l(s[:date], format: :long_date),
                            s[:num]] },
                        @revision_number)) %>
-        <%= submit_tag I18n.t('browse_submissions.find_by_revision_number') %>
+        <%= submit_tag t('browse_submissions.find_by_revision_number') %>
       <% end %>
     </fieldset>
   </div>
 
   <div class='global_actions'>
-    <h2><%= raw(I18n.t('browse_submissions.viewing_revision', revision_number: @revision_number)) %>
+    <h2><%= raw(t('browse_submissions.viewing_revision', revision_number: @revision_number)) %>
         (<span id='current_revision_timestamp_display'>
-           <%= I18n.l(@revision_timestamp, format: :long_date) %>
+           <%= l(@revision_timestamp, format: :long_date) %>
         </span>)
+        <br>
+        <%= t('browse_submissions.currently_collected') %>
+        <% if @grouping.is_collected %>
+           <% if @last_submission %>
+               <%= "#" +  @last_submission.revision_number.to_s +
+          " (" + l(@last_submission.revision_timestamp, format: :long_date) + " )"  %>
+           <% else %>
+               <%= t('browse_submissions.no_rev_before_deadline') %>
+           <% end %>
+        <% else %>
+           <%= t('none') %>
+        <% end %>
     </h2>
 
     <div id='directory_selector'>
       <p>
-        <%= I18n.t('browse_submissions.current_path') %>
+        <%= t('browse_submissions.current_path') %>
         <% path_memory = '/'
            links = []
-           @path.split('/').each do |folder|
-           path_memory = File.join(path_memory, folder)
-           links.push(link_to folder,
-                      action: 'repo_browser',
-                      path: path_memory,
-                      id: @grouping.id,
-                      revision_number: @revision_number)
-        end %>
-        <%= link_to "/#{@assignment.repository_folder}",
-                    action: 'repo_browser',
-                    id: @grouping.id,
-                    path: '/',
-                    revision_number: @revision_number %>
-        <%= links.join('/')%>
+           absolute_path = @assignment.repository_folder + @path
+           absolute_path.split('/').each do |folder|
+             if(folder != @assignment.repository_folder)
+               path_memory = File.join(path_memory, folder)
+             end
+             links.push(link_to "/#{folder}",
+                        action: 'repo_browser',
+                        path: path_memory,
+                        id: @grouping.id,
+                        revision_number: @revision_number)
+           end %>
+        <%= links.join().html_safe %>
       </p>
     </div>
 
     <%= form_tag manually_collect_and_begin_grading_assignment_submission_path(
                    id: @grouping.id,
-                   assignment_id: @assignment.id),
-                 remote: true do %>
+                   assignment_id: @assignment.id) do %>
       <%= hidden_field_tag 'current_revision_number', @revision_number %>
+      <p>
+        <%= check_box_tag 'apply_late_penalty' %>
+        <%= label_tag 'apply_late_penalty',
+                      t('collect_submissions.apply_late_penalty') %>
+      </p>
       <input type='submit'
-             value='<%= I18n.t('browse_submissions.collect_and_grab') %>'
+             value='<%= t('browse_submissions.collect_and_grab') %>'
              onclick="if (!confirm('<%=t(:collect_and_grade_overwrite_warning)%>')) return false;
-                      $('progress_text').update('<%=I18n.t('stopping_collection_process')%>');
+                      jQuery('#progress_text').html('<%=t('stopping_collection_process')%>');
                       return true;"
              name='commit'>
       <%= link_to t('browse_submissions.download_all_files'),
@@ -109,20 +120,6 @@
       <div id='progress_text'></div>
     <% end %>
   </div>
-</div>
 
-<div class='wrapLeft'>
-  <table class='files' id='files'></table>
+  <div id='files_table'></div>
 </div>
-
-<script>
-  new PeriodicalExecuter(function() {
-    new Ajax.Request('<%= update_converted_pdfs_assignment_submissions_path(@assignment, grouping_id: @grouping.id) %>',
-      {
-        asynchronous:true,
-        evalScripts:true,
-        parameters:'authenticity_token=' + AUTH_TOKEN
-      }
-    )
-  }, 3)
-</script>

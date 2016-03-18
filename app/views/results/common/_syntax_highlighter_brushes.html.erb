@@ -1,3 +1,5 @@
+<% # MARKDOWN SUPPORTED WITH Marked.js %>
+<%= javascript_include_tag 'marked' %>
 <% # SOURCE CODE GLOWER AND IMAGE ANNOTATION MANAGER %>
 <%= javascript_include_tag 'SourceCodeGlower/AnnotationText',
                            'SourceCodeGlower/AnnotationTextDisplayer',
@@ -12,7 +14,8 @@
                            'SourceCodeGlower/SourceCodeAdapter',
                            'SourceCodeGlower/SyntaxHighlighter1p5Adapter',
                            'SourceCodeGlower/ImageAnnotationGrid',
-                           'SourceCodeGlower/ImageEventHandler' %>
+                           'SourceCodeGlower/ImageEventHandler',
+                           'SourceCodeGlower/PdfAnnotationManager' %>
 
 <% # SYNTAX HIGHLIGHTER %>
 <%= javascript_include_tag 'syntaxhighlighter/shCore',
@@ -23,5 +26,6 @@
                            'syntaxhighlighter/shBrushJScript',
                            'syntaxhighlighter/shBrushCpp',
                            'syntaxhighlighter/shBrushScheme',
+                           'syntaxhighlighter/shBrushHaskell',
                            'syntaxhighlighter/shBrushScilab',
                            'syntaxhighlighter/shBrushUnknown' %>

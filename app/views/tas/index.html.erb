@@ -1,10 +1,9 @@
-<%= javascript_include_tag 'FilterTable/FilterTable',
-                           'users_manager',
-                           'Graders/index',
-                           'help_system' %>
-<%= render partial: 'boot',
-           formats: [:js],
-           handlers: [:erb] %>
+<%= content_for :head do %>
+  <%= javascript_include_tag 'users_manager',
+                             'Graders/index' %>
+
+  <%= render partial: 'tas_table', formats: [:'js.jsx'], handlers: [:erb] %>
+<% end %>
 
 <div class='title_bar'>
   <h1>
@@ -17,11 +16,11 @@
   </h1>
 
   <div class='heading_buttons'>
-    <%= link_to t(:add_new), new_ta_path %>
+    <%= link_to t(:add_new_grader), new_ta_path %>
     <span class='menu_bar'></span>
-    <%= link_to_function t(:upload), 'modal_upload.open()' %>
+    <%= link_to t(:upload), 'javascript:void(0);', onclick:'modal_upload.open()' %>
     <span class='menu_bar'></span>
-    <%= link_to_function t(:download), 'modal_download.open()' %>
+    <%= link_to t(:download), 'javascript:void(0);', onclick:'modal_download.open()' %>
   </div>
 </div>
 
@@ -49,15 +48,20 @@
         </div>
       <% end -%>
 
-      <div class='table'>
-        <table id='tas'></table>
-      </div>
+      <div id='tas_table'></div>
+
     </div>
   </div>
 </div> <!-- colsLeftHeavy -->
 
 <!-- Modal Windows -->
 <aside class='dialog' id='upload_dialog'>
+  <!-- Script for disabling upload buttons. -->
+  <%= javascript_include_tag 'upload_button_control.js',
+                             id: 'upload_script',
+                             upload_id: 'userlist',
+                             button_id: 'upload' %>
+
   <h2><%= I18n.t('upload') %></h2>
   <p><%= I18n.t('graders.upload.select_csv_file').html_safe %></p>
   <p><%= I18n.t('graders.upload.grader_same_user') %></p>
@@ -73,8 +77,11 @@
     </div>
 
     <section class='dialog-actions'>
-      <%= submit_tag t(:upload), data: { disable_with: t(:uploading_please_wait) } %>
-      <%= button_to_function I18n.t(:close), 'modal_upload.close()' %>
+      <%= submit_tag t(:upload),
+                     data: { disable_with: t(:uploading_please_wait) },
+                     id: 'upload',
+                     disabled: true %>
+      <input type='reset' value='<%= I18n.t(:close) %>' onclick='modal_upload.close();' />      
     </section>
   </form>
 </aside>
@@ -91,6 +98,6 @@
   </p>
 
   <section class='dialog-actions'>
-    <%= button_to_function I18n.t(:close), 'modal_download.close()' %>
+     <input type='reset' value='<%= I18n.t(:close) %>' onclick='modal_download.close();' />    
   </section>
 </aside>

@@ -1,10 +1,22 @@
 class Student < User
 
-  has_many :accepted_groupings, class_name: 'Grouping', through: :memberships, conditions: {'memberships.membership_status' => [StudentMembership::STATUSES[:accepted], StudentMembership::STATUSES[:inviter]]}, source: :grouping
+  has_many :accepted_groupings,
+           -> { where 'memberships.membership_status' => [StudentMembership::STATUSES[:accepted], StudentMembership::STATUSES[:inviter]] },
+           class_name: 'Grouping',
+           through: :memberships,
+           source: :grouping
 
-  has_many :pending_groupings, class_name: 'Grouping', through: :memberships, conditions: {'memberships.membership_status' => StudentMembership::STATUSES[:pending]}, source: :grouping
+  has_many :pending_groupings,
+           -> { where 'memberships.membership_status' => StudentMembership::STATUSES[:pending] },
+           class_name: 'Grouping',
+           through: :memberships,
+           source: :grouping
 
-  has_many :rejected_groupings, class_name: 'Grouping', through: :memberships, conditions: {'memberships.membership_status' => StudentMembership::STATUSES[:rejected]}, source: :grouping
+  has_many :rejected_groupings,
+           -> { where 'memberships.membership_status' => StudentMembership::STATUSES[:rejected] },
+           class_name: 'Grouping',
+           through: :memberships,
+           source: :grouping
 
   has_many :student_memberships, foreign_key: 'user_id'
 
@@ -13,8 +25,9 @@ class Student < User
   belongs_to :section
   accepts_nested_attributes_for :section
 
-  validates_numericality_of :grace_credits, only_integer: true,
-    greater_than_or_equal_to: 0
+  validates_numericality_of :grace_credits,
+                            only_integer: true,
+                            greater_than_or_equal_to: 0
 
   CSV_UPLOAD_ORDER = USER_STUDENT_CSV_UPLOAD_ORDER
   SESSION_TIMEOUT = USER_STUDENT_SESSION_TIMEOUT
@@ -30,7 +43,7 @@ class Student < User
   # a Membership in that Grouping where the membership.status is 'accepted'
   # or 'inviter'
   def accepted_grouping_for(aid)
-    accepted_groupings.find_by_assignment_id(aid)
+    accepted_groupings.where(assignment_id: aid).first
   end
 
   def has_pending_groupings_for?(aid)
@@ -38,7 +51,7 @@ class Student < User
   end
 
   def pending_groupings_for(aid)
-    pending_groupings.find_all_by_assignment_id(aid)
+    pending_groupings.where(assignment_id: aid)
   end
 
   def remaining_grace_credits
@@ -56,31 +69,23 @@ class Student < User
 
   # return pending memberships for a specific assignment
   def pending_memberships_for(aid)
-    groupings = self.pending_groupings_for(aid)
+    groupings = pending_groupings_for(aid)
     if groupings
-      pending_memberships = []
-      groupings.each do |grouping|
-         pending_memberships.push(StudentMembership.find_by_grouping_id_and_user_id(grouping.id, self.id))
+      groupings.map do |grouping|
+        StudentMembership.where(grouping_id: grouping.id,
+                                user_id: id)
+                         .first
       end
-      return pending_memberships
     end
-    nil
   end
 
 
   # Returns the Membership for a Grouping for an Assignment with id 'aid' if
   # this Student is a member with either 'accepted' or 'invitier' membership
   # status
-
   def memberships_for(aid)
-     @student = self
-     @memberships = StudentMembership.all(conditions: {user_id: @student.id})
-     @memberships.each do |m|
-       if m.grouping.assignment_id != aid
-         @memberships.delete(m)
-       end
-     end
-     @memberships
+    StudentMembership.where(user_id: id)
+                     .select { |m| m.grouping.assignment_id == aid }
   end
 
   # invites a student
@@ -100,7 +105,7 @@ class Student < User
 
   def destroy_all_pending_memberships(aid)
     self.pending_groupings_for(aid).each do |grouping|
-      membership = grouping.student_memberships.find_by_user_id(self.id)
+      membership = grouping.student_memberships.where(user_id: id).first
       membership.destroy
     end
   end
@@ -112,21 +117,25 @@ class Student < User
       @assignment = Assignment.find(aid)
       @grouping = Grouping.new
       @grouping.assignment_id = @assignment.id
-      if !Group.first(conditions: {group_name: self.user_name}).nil?
-        @group = Group.first(conditions: {group_name: self.user_name})
+      # If an individual repo has already been created for this user
+      # then just use that one.
+      if !Group.where(group_name: user_name).first.nil?
+        @group = Group.where(group_name: user_name).first
       else
-        @group = Group.new(group_name: self.user_name)
+        @group = Group.new(group_name: user_name)
+
         # We want to have the user_name as repository name,
         # so we have to set the repo_name before we save the group.
-        # We do that only if the assignment is set up to be a
-        # non-web-submit assignment.
-        unless @assignment.allow_web_submits
-          @group.repo_name = self.user_name
-        end
+        @group.repo_name = user_name
         unless @group.save
           m_logger = MarkusLogger.instance
-          m_logger.log("Could not create a group for Student '#{self.user_name}'. The group was #{@group.inspect} - errors: #{@group.errors.inspect}", MarkusLogger::ERROR)
-          raise 'Sorry!  For some reason, your group could not be created.  Please wait a few seconds, then hit refresh to try again.  If you come back to this page, you should inform the course instructor.'
+          m_logger.log("Could not create a group for Student '#{user_name}'."\
+          " The group was #{@group.inspect} - errors:"\
+          " #{@group.errors.inspect}", MarkusLogger::ERROR)
+          raise 'Sorry!  For some reason, your group could not be created.'\
+          '  Please wait a few seconds, then hit refresh to try again.  If'\
+          ' you come back to this page, you should inform the course'\
+          ' instructor.'
         end
       end
 
@@ -134,8 +143,12 @@ class Student < User
       begin
         unless @grouping.save
           m_logger = MarkusLogger.instance
-          m_logger.log("Could not create a grouping for Student '#{self.user_name}'. The grouping was:  #{@grouping.inspect} - errors: #{@grouping.errors.inspect}", MarkusLogger::ERROR)
-          raise 'Sorry!  For some reason, your grouping could not be created.  Please wait a few seconds, and hit refresh to try again.  If you come back to this page, you should inform the course instructor.'
+          m_logger.log("Could not create a grouping for Student '#{user_name}'"\
+          ". The grouping was:  #{@grouping.inspect} - errors: "\
+          "#{@grouping.errors.inspect}", MarkusLogger::ERROR)
+          raise 'Sorry!  For some reason, your grouping could not be created. '\
+          ' Please wait a few seconds, and hit refresh to try again.  If you'\
+          ' come back to this page, you should inform the course instructor.'
         end
       # This exception will only be thrown when we try to save to a grouping that already exists
       rescue ActiveRecord::RecordNotUnique
@@ -158,6 +171,9 @@ class Student < User
       # Update repo permissions if need be. This has to happen
       # after memberships have been established.
       @grouping.update_repository_permissions
+      # Add permissions for TAs and admins.  This completely rerwrites the auth file
+      # but that shouldn't be a big deal in this case.
+      @group.set_repo_permissions
     end
     return true
   end
@@ -180,6 +196,7 @@ class Student < User
 
     # write repo permissions if need be
     grouping.update_repository_permissions
+    group.set_repo_permissions
 
     member = StudentMembership.new(grouping_id: grouping.id, membership_status: StudentMembership::STATUSES[:inviter], user_id: self.id)
     member.save
@@ -188,7 +205,9 @@ class Student < User
 
   # This method is called, when a student joins a group(ing)
   def join(gid)
-    membership = StudentMembership.find_by_grouping_id_and_user_id(gid, self.id)
+    membership = StudentMembership.where(grouping_id: gid,
+                                         user_id: id)
+                                  .first
     membership.membership_status = 'accepted'
     membership.save
 
@@ -215,16 +234,17 @@ class Student < User
     student_id_list.each do |student_id|
       update_list[student_id] = {hidden: true}
       # update repo permissions appropriately
-      memberships = StudentMembership.find_by_user_id(student_id)
+      memberships = StudentMembership.where(user_id: student_id).first
       if memberships
         unless memberships.instance_of?(Array)
           memberships = [memberships]
         end
         student = Student.find(student_id)
         memberships.each do |membership|
-          group = membership.grouping.group
+          grouping = membership.grouping
+          group = grouping.group
           group.access_repo do |repo|
-            if membership.grouping.repository_external_commits_only? && membership.grouping.is_valid?
+            if grouping.assignment.vcs_submit && grouping.is_valid?
               begin
                 repo.remove_user(student.user_name) # revoke repo permissions
               rescue Repository::UserNotFound
@@ -247,16 +267,17 @@ class Student < User
     student_id_list.each do |student_id|
       update_list[student_id] = {hidden: false}
       # update repo permissions appropriately
-      memberships = StudentMembership.find_by_user_id(student_id)
+      memberships = StudentMembership.where(user_id: student_id).first
       if memberships
         unless memberships.instance_of?(Array)
           memberships = [memberships]
         end
         student = Student.find(student_id)
         memberships.each do |membership|
-          group = membership.grouping.group
+          grouping = membership.grouping
+          group = grouping.group
           group.access_repo do |repo|
-            if membership.grouping.repository_external_commits_only? && membership.grouping.is_valid?
+            if grouping.assignment.vcs_submit && grouping.is_valid?
               begin
                 repo.add_user(student.user_name, Repository::Permission::READ_WRITE) # grant repo permissions
               rescue Repository::UserAlreadyExistent

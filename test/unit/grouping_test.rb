@@ -3,7 +3,6 @@ require File.expand_path(File.join(File.dirname(__FILE__), '..', 'blueprints', '
 
 require 'shoulda'
 require 'machinist'
-require 'mocha/setup'
 require 'set'
 
 class GroupingTest < ActiveSupport::TestCase
@@ -50,9 +49,8 @@ class GroupingTest < ActiveSupport::TestCase
       last_modified = @grouping.assignment_folder_last_modified_date
       assert_not_nil(last_modified)
       assert_instance_of(Time, last_modified)
-      # This is not exactly accurate, but it's sufficient
-      # FIXME actually, it sometimes isn't sufficient...
-      assert_equal(Time.now.min, last_modified.min)
+      # Assert change was made sometime during the last 60 seconds.
+      assert (Time.now-60..Time.now).cover?(last_modified)
     end
 
     should 'display Empty Group since no students in the group' do
@@ -134,14 +132,14 @@ class GroupingTest < ActiveSupport::TestCase
       end
 
       should 'be able to remove a member' do
-        @grouping.remove_member(@membership)
+        @grouping.remove_member(@membership.id)
         assert_nil @grouping.membership_status(@membership.user),
                    'This student has just been deleted from this group. His ' +
                        'membership status should be nil'
       end
 
       should 'be able to remove the inviter' do
-        @grouping.remove_member(@inviter_membership)
+        @grouping.remove_member(@inviter_membership.id)
         assert_nil @grouping.membership_status(@inviter)
         assert_not_nil @grouping.inviter
       end
@@ -197,7 +195,7 @@ class GroupingTest < ActiveSupport::TestCase
       end
 
       should 'be able to delete rejected memberships' do
-        @grouping.remove_rejected(@membership)
+        @grouping.remove_rejected(@membership.id)
         assert_nil @grouping.membership_status(@student)
       end
     end
@@ -432,36 +430,6 @@ class GroupingTest < ActiveSupport::TestCase
                        StudentMembership::STATUSES[:accepted],
                        true)
       assert_equal 2, @grouping.accepted_student_memberships.count
-    end
-  end
-
-  context 'an assignment with three named groupings' do
-    setup do
-      @assignment = Assignment.make
-      Ta.make(:user_name => 'ta1')
-      Ta.make(:user_name => 'ta2')
-      grouping = nil
-      ['Titanic', 'Blanche Nef', 'Ukishima Maru'].each do |name|
-        group = Group.make(:group_name => name)
-        @grouping = Grouping.make(:assignment => @assignment,
-                      :group => group)
-      end
-    end
-
-    should 'load csv file' do
-      csv_file_data = "Titanic,ta1\nUkishima Maru,ta1,ta2\nBlanche Nef,ta2"
-      failures = Grouping.assign_tas_by_csv(csv_file_data, @assignment.id, nil)
-
-      assert_equal 2, @grouping.ta_memberships.count
-      assert_equal 0, failures.size
-    end
-
-    should 'deal with malformed csv file' do
-      csv_file_data = "Titanic,ta1\nUk125125ishima Maru,ta1,ta2\nBlanche Nef,ta2"
-      failures = Grouping.assign_tas_by_csv(csv_file_data, @assignment.id, nil)
-
-      assert_equal 0, @grouping.ta_memberships.count
-      assert_equal failures[0], 'Uk125125ishima Maru'
     end
   end
 

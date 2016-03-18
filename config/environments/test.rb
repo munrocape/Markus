@@ -7,8 +7,7 @@ Markus::Application.configure do
   # and recreated between test runs.  Don't rely on the data there!
   config.cache_classes = true
 
-  # Log error messages when you accidentally call methods on nil.
-  config.whiny_nils = true
+  config.eager_load = false
 
   # Show full error reports and disable caching
   config.consider_all_requests_local = true
@@ -28,12 +27,10 @@ Markus::Application.configure do
   # Show Deprecated Warnings (to :log or to :stderr)
   config.active_support.deprecation = :stderr
 
-  # Raise exception on mass assignment protection for Active Record models
-  config.active_record.mass_assignment_sanitizer = :strict
-
-  # Log the query plan for queries taking more than this (works
-  # with SQLite, MySQL, and PostgreSQL)
-  config.active_record.auto_explain_threshold_in_seconds = 1.0
+  # In rails 5, the default value is "random".
+  Rails.application.configure do
+    config.active_support.test_order = :sorted
+  end
 
   ###################################################################
   # MarkUs SPECIFIC CONFIGURATION
@@ -57,6 +54,23 @@ Markus::Application.configure do
   # That is why MarkUs does not allow usernames/passwords which contain
   # \n or \0. These are the only restrictions.
   VALIDATE_FILE = "#{::Rails.root.to_s}/config/dummy_validate.sh"
+
+  # Normally exit status 0 means successful, 1 means no such user,
+  # and 2 means wrong password.
+  # The following allows for one additional custom exit status which also
+  # represents a failure to log in, but says so with a custom string.
+  # It is commented out by default because there is no additional custom
+  # exit status by default.
+  #VALIDATE_CUSTOM_EXIT_STATUS = 38
+  #VALIDATE_CUSTOM_STATUS_DISPLAY = 'You are a squid.  Only vertebrates may use MarkUs.'
+
+  # Custom messages for "user not allowed" and "login incorrect",
+  # overriding the default "login failed" message.  By default,
+  # MarkUs does not distinguish these cases for security reasons.
+  # If these variables are not defined (commented out), it uses the
+  # standard "login failed" message for both situations.
+  #VALIDATE_USER_NOT_ALLOWED_DISPLAY = 'That is your correct University of Foo user name and password, but you have not been added to this particular MarkUs database.  Please contact your instructor or check your course web page.'
+  #VALIDATE_LOGIN_INCORRECT_DISPLAY = 'Login incorrect.  You can check your Foo U user name or reset your password at https://www.foo.example.edu/passwords.'
 
   ###################################################################
   # Authentication Settings
@@ -108,12 +122,18 @@ Markus::Application.configure do
   ###################################################################
   # Directory where Repositories will be created. Make sure MarkUs is allowed
   # to write to this directory
-  REPOSITORY_STORAGE = "#{::Rails.root.to_s}/data/test/dummy" # unused, because of type memory
+  REPOSITORY_STORAGE = "#{::Rails.root}/data/test/repos"
 
   ###################################################################
-  # Directory where converted PDF files will be stored as JPEGs. Make sure MarkUs
-  # is allowed to write to this directory
-  PDF_STORAGE = "#{::Rails.root.to_s}/data/test/pdfs"
+  # Location of the public and private key for the git user on the system
+  GITOLITE_SETTINGS = { public_key: '/home/git/vagrant.pub',
+                        private_key: '/home/vagrant/.ssh/id_rsa',
+                        host: 'localhost' }
+
+  ###################################################################
+  # Directory where authentication keys will be uploaded.
+  # Make sure MarkUs is allowed to write to this directory
+  KEY_STORAGE = "#{::Rails.root}/data/test/keys"
 
   ###################################################################
   # Directory where the Automated Testing Repositories will be created.
@@ -121,11 +141,8 @@ Markus::Application.configure do
   AUTOMATED_TESTS_REPOSITORY = "#{::Rails.root.to_s}/data/test/automated_tests"
 
   ###################################################################
-  # Set this to true or false if you want to be able to display and annotate
-  # PDF documents within the browser.
-  # When collecting pdfs files, it converts them to jpg format via RGhost.
-  # RGhost is ghostscript dependent. Be sure ghostscript is installed.
-  PDF_SUPPORT = false
+  # Max file size for submissions in Bytes
+  MAX_FILE_SIZE = 5000000
 
   ###################################################################
   # Change this to 'REPOSITORY_EXTERNAL_SUBMITS_ONLY = true' if you

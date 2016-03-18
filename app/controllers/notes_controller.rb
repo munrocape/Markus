@@ -12,8 +12,8 @@ class NotesController < ApplicationController
     @highlight_field = params[:highlight_field]
     @number_of_notes_field = params[:number_of_notes_field]
 
-    @notes = Note.all(conditions: {noteable_id: @noteable.id,
-                                      noteable_type: @noteable.class.name})
+    @notes = Note.where(noteable_id: @noteable.id, noteable_type: @noteable.class.name)
+
     render partial: 'notes/modal_dialogs/notes_dialog_script',
       formats: [:js], handlers: [:erb]
   end
@@ -39,7 +39,7 @@ class NotesController < ApplicationController
   end
 
   def index
-    @notes = Note.all(order: "created_at DESC", include: [:user, :noteable])
+    @notes = Note.includes(:user, :noteable).order(created_at: :desc)
     @current_user = current_user
     # Notes are attached to noteables, if there are no noteables, we can't make notes.
     @noteables_available = Note.noteables_exist?
@@ -54,7 +54,7 @@ class NotesController < ApplicationController
   end
 
   def create
-    @note = Note.new(params[:note])
+    @note = Note.new(notes_params)
     @note.noteable_type = params[:noteable_type]
     @note.creator_id = @current_user.id
 
@@ -77,7 +77,7 @@ class NotesController < ApplicationController
   def noteable_object_selector
     case params[:noteable_type]
       when 'Student'
-        @students = Student.all(order: 'user_name')
+        @students = Student.order(:user_name)
       when 'Assignment'
         @assignments = Assignment.all
       when 'Grouping'
@@ -96,7 +96,7 @@ class NotesController < ApplicationController
   end
 
   def update
-    if @note.update_attributes(params[:note])
+    if @note.update_attributes(notes_params)
       flash[:success] = I18n.t('notes.update.success')
       redirect_to action: 'index'
     else
@@ -116,13 +116,13 @@ class NotesController < ApplicationController
   end
 
   private
+
     def retrieve_groupings(assignment)
       if assignment.nil?
         @groupings = Array.new
         return
       end
-      @groupings = Grouping.find_all_by_assignment_id(assignment.id,
-        include: [:group, {student_memberships: :user}])
+      @groupings = Grouping.includes(:group, student_memberships: :user).where(assignment_id: assignment.id)
     end
 
     def new_retrieve
@@ -142,4 +142,7 @@ class NotesController < ApplicationController
       end
     end
 
+  def notes_params
+    params.require(:note).permit(:notes_message, :noteable_id)
+  end
 end

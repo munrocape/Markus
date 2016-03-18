@@ -1,8 +1,8 @@
-@import '../mixins';
-@import '../constants';
+@import 'mixins';
+@import 'constants';
 
 .dp-highlighter {
-  font: 1em $mono-font-stack;
+  font: 1em $mono-fonts;
   margin: 0;
   padding-top: 1px; /* adds a little border on top when controls are hidden */
   width: 100%;
@@ -25,22 +25,22 @@
   }
 
   .bar {
-    @include border-radius(5px);
-    background: #ededed;
+    background: $grey;
+    border-radius: $radius;
     margin: 0 0 20px 0;
     padding: 5px;
   }
 
   /* Actual styling */
   ol {
-    background-color: #fff;
-    color: #5c5c5c;
+    background-color: $white;
+    color: $dark-grey;
     list-style: decimal; /* for ie */
     padding: 0;
 
     li {
       &:nth-child(odd) {
-        background-color: #fff;
+        background-color: $white;
         color: inherit;
       }
 
@@ -60,7 +60,7 @@
     list-style-position: outside !important;
     list-style: decimal-leading-zero; /* better look for others, override cascade from OL */
     margin: 0 !important;
-    padding: 0 3px 0 10px !important;
+    padding: 0 3px 1px 10px !important;
   }
 
   .columns {
@@ -77,7 +77,7 @@
   .tools {
     background-color: #f8f8f8;
     color: #464646;
-    font: 0.825em $font-stack;
+    font: 0.825em $fonts;
     padding: 5px;
     text-align: right;
 
@@ -170,14 +170,16 @@
     color: gray;
   }
 
-  .source_code_glowing_1 {
+  .source-code-glowing-1 {
     background-color: #fffcc4 !important;
-    color: #000 !important;
   }
 
-  .source_code_glowing_2 {
-    background-color: #ff9 !important;
-    color: #00f !important;
+  .source-code-glowing-2 {
+    background-color: #fff085 !important;
+  }
+
+  .source-code-glowing-3 {
+    background-color: #ffea49 !important;
   }
 }
 
@@ -191,7 +193,7 @@
   padding: 0;
 
   table {
-    font: 1em $font-stack !important;
+    font: 1em $fonts !important;
     height: 100%;
     width: 100%;
   }
@@ -226,7 +228,7 @@
   .close {
     background-color: #eceadb;
     color: #333;
-    font: 1em $font-stack !important;
+    font: 1em $fonts !important;
     height: 22px;
     width: 60px;
   }

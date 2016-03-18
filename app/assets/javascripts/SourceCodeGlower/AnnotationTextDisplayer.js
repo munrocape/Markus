@@ -38,7 +38,7 @@ AnnotationTextDisplayer.prototype.displayCollection = function(collection, x, y)
 
   // Each element is an AnnotationText object
   collection.forEach(function(element, index, array) {
-    final_string += '<p>' + element.getContent() + '</p>';
+    final_string += '<p>' + marked(element.getContent()) + '</p>';
   });
 
   // Update the Display node (a div, in this case) to be in the right
@@ -72,6 +72,7 @@ AnnotationTextDisplayer.prototype.hide = function() {
 // Show the displayer
 AnnotationTextDisplayer.prototype.show = function() {
   this.display_node.style.display = 'block';
+  reloadDOM();
 }
 
 // Returns whether or not the Displayer is showing

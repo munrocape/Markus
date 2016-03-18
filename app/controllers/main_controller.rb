@@ -10,8 +10,9 @@ class MainController < ApplicationController
   # check for authorization
   before_filter      :authorize_for_user,
                      except: [:login,
-                                 :page_not_found]
-  before_filter :authorize_only_for_admin, only: [:login_as]
+                              :page_not_found,
+                              :check_timeout]
+  before_filter :authorize_for_admin_and_admin_logged_in_as, only: [:login_as]
 
   layout 'main'
 
@@ -21,7 +22,6 @@ class MainController < ApplicationController
   # Handles login requests; usually redirected here when trying to access
   # the website and has not logged in yet, or session has expired.  User
   # is redirected to main page if session is still active and valid.
-
   def login
 
     # external auth has been done, skip markus authorization
@@ -151,10 +151,16 @@ class MainController < ApplicationController
       return
     end
     @assignments = Assignment.unscoped.includes([
-      :assignment_stat, :ta_memberships,
+      :assignment_stat, :groupings, :ta_memberships,
       groupings: :current_submission_used,
       submission_rule: :assignment
-    ]).all(order: 'due_date DESC')
+    ]).order('due_date ASC')
+    @grade_entry_forms = GradeEntryForm.unscoped.includes([
+      :grade_entry_items
+    ]).order('id ASC')
+
+    @current_assignment = Assignment.get_current_assignment
+    @current_ta = @current_assignment.tas.first unless @current_assignment.nil?
 
     render :index, layout: 'content'
   end
@@ -198,14 +204,19 @@ class MainController < ApplicationController
   #   role_switch
   def login_as
     validation_result = nil
+    real_user = (session[:real_uid] && User.find_by_id(session[:real_uid])) ||
+        current_user
     if MarkusConfigurator.markus_config_remote_user_auth
-      validation_result = validate_user_without_login(params[:effective_user_login],
-                                        params[:user_login])
+      validation_result = validate_user_without_login(
+                             params[:effective_user_login],
+                             real_user.user_name)
     else
-      validation_result = validate_user(params[:effective_user_login],
-                                        params[:user_login],
-                                        params[:admin_password])
+      validation_result = validate_user(
+                             params[:effective_user_login],
+                             real_user.user_name,
+                             params[:admin_password])
     end
+
     unless validation_result[:error].nil?
       # There were validation errors
       render partial: 'role_switch_handler',
@@ -219,8 +230,19 @@ class MainController < ApplicationController
       return
     end
 
-    # Check if an admin is trying to login as another admin. Should not be allowed
-    if found_user.admin?
+    # Check if an admin trying to login as the current user
+    if found_user == current_user
+      # error
+      render partial: 'role_switch_handler',
+             formats: [:js], handlers: [:erb],
+             # TODO: put better error message
+             locals: { error: I18n.t(:login_failed) }
+      return
+
+    end
+    # Check if an admin is trying to login as another admin.
+    # Should not be allowed unless switching back to original admin role
+    if found_user.admin? && found_user != real_user
       # error
       render partial: 'role_switch_handler',
         formats: [:js], handlers: [:erb],
@@ -228,18 +250,30 @@ class MainController < ApplicationController
       return
     end
 
-    # Log the admin that assumed the role of another user together with the time
-    # and date that the role switch occurred
-    m_logger = MarkusLogger.instance
-    m_logger.log("Admin '#{current_user.user_name}' logged in as '#{params[:effective_user_login]}'.")
+    # Save the uid of the admin that is switching roles if not already saved
+    session[:real_uid] ||= session[:uid]
 
-    # Save the uid of the admin that is switching roles
-    session[:real_uid] = session[:uid]
+    # Log the date that the role switch occurred
+    m_logger = MarkusLogger.instance
+    if current_user != real_user
+      # Log that the admin dropped role of another user
+      m_logger.log("Admin '#{real_user.user_name}' logged out from " +
+                       "'#{current_user.user_name}'.")
+    end
+
+    if found_user != real_user
+      # Log that the admin assumed role of another user
+      m_logger.log("Admin '#{real_user.user_name}' logged in as " +
+                       "'#{found_user.user_name}'.")
+    else
+      # Reset real user id because admin resumed their real role
+      session[:real_uid] = nil
+    end
+
     # Change the uid of the current user
     self.current_user = found_user
 
     if logged_in?
-      uri = session[:redirect_uri]
       session[:redirect_uri] = nil
       refresh_timeout
       current_user.set_api_key # set api key in DB for user if not yet set
@@ -281,6 +315,15 @@ class MainController < ApplicationController
     cookies.delete :auth_token
     reset_session
     redirect_to action: 'login'
+  end
+
+  def check_timeout
+    if !check_warned && check_imminent_expiry
+      render template: 'main/timeout_imminent'
+      set_warned
+    else
+      render nothing: true
+    end
   end
 
 private
@@ -344,6 +387,13 @@ private
       validation_result[:error] = I18n.t('external_authentication_not_supported')
       return validation_result
     end
+
+    if (defined? VALIDATE_CUSTOM_STATUS_DISPLAY) &&
+       authenticate_response == User::AUTHENTICATE_CUSTOM_MESSAGE
+      validation_result[:error] = VALIDATE_CUSTOM_STATUS_DISPLAY
+      return validation_result
+    end
+
     if authenticate_response == User::AUTHENTICATE_SUCCESS
       # Username/password combination is valid. Check if user is
       # allowed to use MarkUs.
@@ -357,11 +407,19 @@ private
         # not a good idea to report this to the outside world. It makes it
         # easier for attempted break-ins
         # if one can distinguish between existent and non-existent users.
-        validation_result[:error] = I18n.t(:login_failed)
+        if defined? VALIDATE_USER_NOT_ALLOWED_DISPLAY
+          validation_result[:error] = VALIDATE_USER_NOT_ALLOWED_DISPLAY
+        else
+          validation_result[:error] = I18n.t(:login_failed)
+        end
         return validation_result
       end
     else
-      validation_result[:error] = I18n.t(:login_failed)
+      if defined? VALIDATE_LOGIN_INCORRECT_DISPLAY
+        validation_result[:error] = VALIDATE_LOGIN_INCORRECT_DISPLAY
+      else
+        validation_result[:error] = I18n.t(:login_failed)
+      end
       return validation_result
     end
 
@@ -393,7 +451,11 @@ private
       # not a good idea to report this to the outside world. It makes it
       # easier for attempted break-ins
       # if one can distinguish between existent and non-existent users.
-      validation_result[:error] = I18n.t(:login_failed)
+      if defined? VALIDATE_USER_NOT_ALLOWED_DISPLAY
+        validation_result[:error] = VALIDATE_USER_NOT_ALLOWED_DISPLAY
+      else
+        validation_result[:error] = I18n.t(:login_failed)
+      end
       return validation_result
     end
 
@@ -403,5 +465,4 @@ private
     validation_result[:user] = found_user
     validation_result
   end
-
 end

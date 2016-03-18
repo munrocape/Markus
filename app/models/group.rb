@@ -45,7 +45,7 @@ class Group < ActiveRecord::Base
   end
 
   def grouping_for_assignment(aid)
-    groupings.first(conditions: {assignment_id: aid})
+    groupings.where(assignment_id: aid).first
   end
 
   # Returns the URL for externally accessible repos
@@ -57,6 +57,7 @@ class Group < ActiveRecord::Base
     MarkusConfigurator.markus_config_repository_admin?
   end
 
+  # TODO: Get rid of this funcion and re-write Repository.get_class
   # Returns configuration for repository
   # configuration
   def repository_config
@@ -68,7 +69,7 @@ class Group < ActiveRecord::Base
   end
 
   def build_repository
-    # create repositories and write permissions if and only if we are admin
+    # create repositories if and only if we are admin
     return true if !MarkusConfigurator.markus_config_repository_admin?
 
     # This might cause repository collision errors, because when the group
@@ -92,7 +93,12 @@ class Group < ActiveRecord::Base
                    "(Repository name was: '#{self.repo_name}'). Error message: '#{e.message}'",
                    MarkusLogger::ERROR)
     end
+    true
+  end
 
+  # Set the default repo permissions.
+  def set_repo_permissions
+    return true if !MarkusConfigurator.markus_config_repository_admin?
     # Each admin user will have read and write permissions on each repo
     user_permissions = {}
     Admin.all.each do |admin|

@@ -2,15 +2,15 @@
 <html>
 <head>
   <%= render partial: 'layouts/head' %>
-  <title><%= t(:markus) %> - <%= controller.action_name %></title>
-  <%= javascript_include_tag 'application', 'prototype' %>
-  <%= stylesheet_link_tag 'application', media: 'all' %>
-  <%= stylesheet_link_tag params[:controller], media: 'all' %>
+  <title><%= t(:markus) %> - <%= controller.action_name.titleize %></title>
+  <%# React stuff (compressed version + JSX transformer) %>
+  <%= javascript_include_tag 'https://cdnjs.cloudflare.com/ajax/libs/react/0.11.0/react.min.js',
+                             'https://cdnjs.cloudflare.com/ajax/libs/react/0.11.0/JSXTransformer.js' %>
+  <%= javascript_include_tag 'application' %>
   <% # UI LIBRARIES %>
   <%= javascript_include_tag 'menu',
                              'layouts',
-                             'prototype-snippet' %>
-  <%= csrf_meta_tags %>
+                             'help-system' %>
   <%= yield :head %>
 </head>
 <body>
@@ -40,11 +40,17 @@
     <%= render partial: 'layouts/footer' %>
   </div>
 
-  <%= render 'layouts/redirect', formats: [:js], handlers: [:erb] %>
+  <%= render partial: 'layouts/redirect', formats: [:js], handlers: [:erb] %>
 
   <%# Toggle jQuery's noConflict mode so it does not conflict with Prototype %>
   <script>
     jQuery.noConflict();
+    jQuery(document).ready(
+      function($){
+        setInterval(function(){
+          jQuery.get('<%= check_timeout_main_index_path %>');
+        }, 120000);
+      });
   </script>
 </body>
 </html>

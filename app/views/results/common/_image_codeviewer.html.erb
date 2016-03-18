@@ -1,7 +1,7 @@
 <div id='image_container' class='image_container'>
   <% # Create a box for each image annotation %>
   <% @annots.each do |annot| %>
-    <div id='annotation_holder_<%= annot.annotation_text.id %>' class='annotation_holder'></div>
+    <div id='annotation_holder_<%= annot.id %>' class='annotation_holder'></div>
   <% end %>
 
   <img id='image_preview'
@@ -18,14 +18,12 @@
          value=<%= (@current_user.ta? || @current_user.admin?) && !@result.released_to_students %>>
 
   <script>
-  //<![CDATA[
     source_code_ready_for_image();
     <% if (defined? annots) %>
       <% annots.each do |annot| %>
           add_annotation_text(<%= annot.annotation_text.id %>,
-                              '<%= simple_format(escape_javascript(annot.annotation_text.content.to_s)) %>');
+                              '<%= escape_javascript(markdown(annot.annotation_text.html_content)) %>');
       <% end %>
     <% end %>
-  //]]>
   </script>
 </div>

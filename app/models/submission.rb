@@ -2,12 +2,12 @@ require 'fileutils' # FileUtils used here
 
 # Handle for getting student submissions.  Actual instance depend
 # on whether an assignment is a group or individual assignment.
-# Use Assignment.submission_by(user) to retrieve the correct submission.
 class Submission < ActiveRecord::Base
   after_create :create_result
-  before_validation(:bump_old_submissions, on: :create)
+  before_validation :bump_old_submissions, on: :create
 
   validates_numericality_of :submission_version, only_integer: true
+  validate :max_number_of_results
   belongs_to :grouping
   has_many   :results, dependent: :destroy
   has_many   :submission_files, dependent: :destroy
@@ -23,7 +23,7 @@ class Submission < ActiveRecord::Base
      revision = repo.get_revision_by_timestamp(timestamp, path)
      submission = self.generate_new_submission(grouping, revision)
      repo.close
-     return submission
+     submission
   end
 
   def self.create_by_revision_number(grouping, revision_number)
@@ -31,61 +31,60 @@ class Submission < ActiveRecord::Base
     revision = repo.get_revision(revision_number)
     submission = self.generate_new_submission(grouping, revision)
     repo.close
-    return submission
+    submission
   end
 
   def self.generate_new_submission(grouping, revision)
-     new_submission = Submission.new
-     new_submission.grouping = grouping
-     new_submission.submission_version = 1
-     new_submission.submission_version_used = true
-     new_submission.revision_timestamp = revision.timestamp
-     new_submission.revision_number = revision.revision_number
+    new_submission = Submission.new
+    new_submission.grouping = grouping
+    new_submission.submission_version = 1
+    new_submission.submission_version_used = true
+    new_submission.revision_timestamp = revision.timestamp
+    new_submission.revision_number = revision.revision_number
 
-     new_submission.transaction do
-       begin
-         new_submission.populate_with_submission_files(revision)
-       rescue Repository::FileDoesNotExist
-         #populate the submission with no files instead of raising an exception
-       end
-       new_submission.save
-     end
-     return new_submission
+    new_submission.transaction do
+      begin
+        new_submission.populate_with_submission_files(revision)
+      rescue Repository::FileDoesNotExist
+        # populate the submission with no files instead of raising an exception
+      end
+      new_submission.save
+    end
+    new_submission
   end
 
-  # returns the original result
+  # Returns the original result.
   def get_original_result
-    if self.remark_result_id.nil?
-      Result.first(conditions: ['submission_id = ?', self.id])
-    else
-      Result.first(conditions: ['submission_id = ? AND id != ?',
-                                   self.id, self.remark_result_id])
-    end
+    Result.where(submission_id: id).order(:created_at).first
   end
 
-  # returns the remark result if exists, returns nil if does not exist
-  def get_remark_result
-    Result.first(conditions: ['id = ?', self.remark_result_id])
+  def remark_result
+    results.where.not(remark_request_submitted_at: nil).first
   end
 
-  # returns the latest result - remark result if exists and submitted, else original result
+  def remark_result_id
+    remark_result.try(:id)
+  end
+
+  # Returns the latest result.
   def get_latest_result
-    if self.remark_submitted?
-      self.get_remark_result
+    if remark_submitted?
+      remark_result
     else
-      self.get_original_result
+      get_original_result
     end
   end
 
-  # returns the latest completed result - note: will return nil if there is no completed result
+  # Returns the latest completed result.
   def get_latest_completed_result
-    if self.remark_submitted? && self.get_remark_result.marking_state == Result::MARKING_STATES[:complete]
-      return self.get_remark_result
+    if remark_submitted? &&
+       remark_result.marking_state == Result::MARKING_STATES[:complete]
+      remark_result
+    elsif get_original_result.marking_state == Result::MARKING_STATES[:complete]
+      get_original_result
+    else
+      nil
     end
-    if self.get_original_result.marking_state == Result::MARKING_STATES[:complete]
-      return self.get_original_result
-    end
-    nil
   end
 
   # For group submissions, actions here must only be accessible to members
@@ -118,7 +117,7 @@ class Submission < ActiveRecord::Base
   # (for now, called "BACKUP")
   def remove_file(filename)
     # get all submissions for this filename
-    files = submission_files.all(conditions: ['filename = ?', filename])
+    files = submission_files.where(filename: filename)
     return unless files && !files.empty?
     files.each { |f| f.destroy }  # destroy all records first
 
@@ -142,19 +141,16 @@ class Submission < ActiveRecord::Base
     results.any?
   end
 
-  # Does this submission have a remark result?
+  # Returns whether this submission has a remark result.
   def has_remark?
-    !self.remark_result_id.nil?
+    !remark_result.nil?
   end
 
-  # Does this submission have a remark request submitted?
-  # remark_results in 'unmarked' state have not been submitted by the student yet (just saved)
-  # Submitted means that the remark request can be viewed by instructors and TAs and is no
-  #   longer editable by the student.
-  # Saved means that the remark request cannot be viewed by instructors or TAs yet and
-  #   the student can still make changes to the request details.
+  # Returns whether this submission has a remark request that has been
+  # submitted to instructors or TAs.
   def remark_submitted?
-    self.has_remark? && self.get_remark_result.marking_state != Result::MARKING_STATES[:unmarked]
+    results.where.not(remark_request_submitted_at: nil)
+           .where.not(marking_state: Result::MARKING_STATES[:unmarked]).size > 0
   end
 
   # Helper methods
@@ -186,42 +182,37 @@ class Submission < ActiveRecord::Base
   #=== Returns
   # nil if no such submission exists.
   def self.get_submission_by_group_and_assignment(group_n, ass_si)
-    assignment = Assignment.find_by_short_identifier(ass_si)
-    group = Group.find_by_group_name(group_n)
+    assignment = Assignment.where(short_identifier: ass_si).first
+    group = Group.where(group_name: group_n).first
     if !assignment.nil? && !group.nil?
       grouping = group.grouping_for_assignment(assignment.id)
-      return grouping.current_submission_used if !grouping.nil?
+      grouping.current_submission_used if !grouping.nil?
     end
-    return nil
   end
 
-  def create_remark_result
-    remark_result = Result.new
-    results << remark_result
-    remark_result.marking_state = Result::MARKING_STATES[:unmarked]
-    remark_result.submission_id = self.id
-    remark_result.save
-    # link remark result id to submission - must be done after remark result is saved (so it has an id)
-    self.remark_result_id = remark_result.id
-    self.save
+  def make_remark_result
+    remark = Result.create(
+      marking_state: Result::MARKING_STATES[:unmarked],
+      submission: self,
+      remark_request_submitted_at: Time.zone.now)
 
     # populate remark result with old marks
     original_result = get_original_result
 
-    old_extra_marks = original_result.extra_marks
-    old_extra_marks.each do |old_extra_mark|
-      remark_extra_mark = ExtraMark.new(old_extra_mark.attributes.merge(
-        {result_id: self.remark_result_id, created_at: Time.zone.now}))
-      remark_extra_mark.save(validate: false)
-      remark_result.extra_marks << remark_extra_mark
+    original_result.extra_marks.each do |extra_mark|
+      remark.extra_marks.create(result: remark,
+                                created_at: Time.zone.now,
+                                markable_id: extra_mark.markable_id,
+                                mark: extra_mark.mark,
+                                markable_type: extra_mark.markable_type)
     end
 
-    old_marks = original_result.marks
-    old_marks.each do |old_mark|
-      remark_mark = Mark.new(old_mark.attributes.merge(
-        {result_id: self.remark_result_id, created_at: Time.zone.now}))
-      remark_mark.save(validate: false)
-      remark_result.marks << remark_mark
+    original_result.marks.each do |mark|
+      remark_result.marks.create(result: remark,
+                                 created_at: Time.zone.now,
+                                 markable_id: mark.markable_id,
+                                 mark: mark.mark,
+                                 markable_type: mark.markable_type)
     end
   end
 
@@ -250,4 +241,7 @@ class Submission < ActiveRecord::Base
      end
   end
 
+  def max_number_of_results
+    results.size < 3
+  end
 end

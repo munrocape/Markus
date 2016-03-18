@@ -2,7 +2,6 @@ require File.expand_path(File.join(File.dirname(__FILE__), 'authenticated_contro
 require File.expand_path(File.join(File.dirname(__FILE__), '..', 'test_helper'))
 require File.expand_path(File.join(File.dirname(__FILE__), '..', 'blueprints', 'helper'))
 require 'shoulda'
-require 'mocha/setup'
 
 class ResultsControllerTest < AuthenticatedControllerTest
 
@@ -67,15 +66,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
       assert_response :redirect
     end
 
-    should 'not be able to update overall remark comment' do
-      get :update_overall_remark_comment,
-          :assignment_id => 1,
-          :submission_id => 1,
-          :id => 1
-
-      assert_response :redirect
-    end
-
     should 'not be able to update remark request' do
       get :update_remark_request,
           :assignment_id => 1,
@@ -85,10 +75,10 @@ class ResultsControllerTest < AuthenticatedControllerTest
     end
 
     should 'not be able to cancel remark request' do
-      get :cancel_remark_request,
-          :assignment_id => 1,
-          :submission_id => 1,
-          :id => 1
+      delete :cancel_remark_request,
+             assignment_id: 1,
+             submission_id: 1,
+             id: 1
       assert_response :redirect
     end
 
@@ -196,11 +186,12 @@ class ResultsControllerTest < AuthenticatedControllerTest
 
         should 'GET on :update_marking_state' do
           get_as @student,
-                  :update_marking_state,
-                  :assignment_id => 1,
-                  :submission_id => 1,
-                  :id => @result.id,
-                  :value => 1
+                 :update_marking_state,
+                 format: :js,
+                 assignment_id: 1,
+                 submission_id: 1,
+                 id: @result.id,
+                 value: 1
           assert_response :missing
           assert render_template 404
         end
@@ -233,34 +224,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
           assert_not_equal @result.overall_comment, @new_comment
         end
 
-        should 'GET on :update_overall_remark_comment' do
-          @new_comment = 'a changed overall remark comment!'
-          get_as @student,
-                  :update_overall_remark_comment,
-                  :assignment_id => 1,
-                  :submission_id => 1,
-                  :id => @result.id,
-                  :result => {:overall_comment => @new_comment}
-          assert_response :missing
-          assert render_template 404
-          @result.reload
-          assert_not_equal @result.overall_comment, @new_comment
-        end
-
-        should 'POST on :update_overall_remark_comment' do
-          @new_comment = 'a changed overall remark comment!'
-          post_as @student,
-                  :update_overall_remark_comment,
-                  :assignment_id => 1,
-                  :submission_id => 1,
-                  :id => @result.id,
-                  :result => {:overall_comment => @new_comment}
-          assert_response :missing
-          assert render_template 404
-          @result.reload
-          assert_not_equal @result.overall_comment, @new_comment
-        end
-
         context 'GET on :download' do
           setup do
             @file = SubmissionFile.new
@@ -271,7 +234,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
             should 'with permissions to download the file' do
               @file.expects(:filename).once.returns('filename')
               @file.expects(:is_supported_image?).once.returns(false)
-              @file.expects(:is_pdf?).once.returns(false)
               @file.expects(:retrieve_file).returns('file content')
               ResultsController.any_instance.stubs(
                     :authorized_to_download?).once.returns(true)
@@ -349,7 +311,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
           should 'with annotations included' do
             @file.expects(:filename).once.returns('filename')
             @file.expects(:is_supported_image?).once.returns(false)
-            @file.expects(:is_pdf?).once.returns(false)
             @file.expects(:retrieve_file).returns('file content')
             ResultsController.any_instance.stubs(:authorized_to_download?).once.returns(true)
             SubmissionFile.stubs(:find).once.returns(@file)
@@ -372,17 +333,19 @@ class ResultsControllerTest < AuthenticatedControllerTest
           setup do
             SubmissionFile.make(:submission => @submission)
             @submission_file = @result.submission.submission_files.first
+            @request.env['HTTP_REFERER'] = '/assignments'
           end
 
           should 'and the student has no access to that file' do
             @no_access_submission_file = SubmissionFile.make
             get_as @student,
-                    :codeviewer,
-                    :assignment_id => @assignment.id,
-                    :submission_id => 1,
-                    :id => 1,
-                    :submission_file_id => @no_access_submission_file.id,
-                    :focus_line => 1
+                   :codeviewer,
+                   format: :js,
+                   assignment_id: @assignment.id,
+                   submission_id: 1,
+                   id: 1,
+                   submission_file_id: @no_access_submission_file.id,
+                   focus_line: 1
 
             assert_not_nil assigns :assignment
             assert_not_nil assigns :submission_file_id
@@ -390,15 +353,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
             assert_nil assigns :file_contents
             assert_nil assigns :annots
             assert_nil assigns :all_annots
-            assert render_template 'shared/_handle_error.js.erb'
-            assert_response :success
-
-            # Workaround to assert that the error message made its way to
-            # the response
-            r = Regexp.new(I18n.t(
-                    'submission_file.error.no_access',
-                    :submission_file_id => @no_access_submission_file.id))
-            assert_match r, @response.body
+            assert_response :found
           end
 
           should 'with file reading error' do
@@ -406,12 +361,13 @@ class ResultsControllerTest < AuthenticatedControllerTest
             SubmissionFile.any_instance.expects(
               :retrieve_file).once.raises(Exception.new(SAMPLE_ERR_MSG))
             get_as @student,
-                  :codeviewer,
-                  :assignment_id => @assignment.id,
-                  :submission_id => 1,
-                  :submission_file_id => @submission_file.id,
-                  :id => 1,
-                  :focus_line => 1
+                   :codeviewer,
+                   format: :js,
+                   assignment_id: @assignment.id,
+                   submission_id: 1,
+                   submission_file_id: @submission_file.id,
+                   id: 1,
+                   focus_line: 1
             assert_not_nil assigns :assignment
             assert_not_nil assigns :submission_file_id
             assert_not_nil assigns :focus_line
@@ -433,12 +389,13 @@ class ResultsControllerTest < AuthenticatedControllerTest
             SubmissionFile.any_instance.expects(
               :retrieve_file).once.returns('file content')
             get_as @student,
-                  :codeviewer,
-                  :assignment_id => @assignment.id,
-                  :submission_id => 1,
-                  :submission_file_id => @submission_file.id,
-                  :id => 1,
-                  :focus_line => 1
+                   :codeviewer,
+                   format: :js,
+                   assignment_id: @assignment.id,
+                   submission_id: 1,
+                   submission_file_id: @submission_file.id,
+                   id: 1,
+                   focus_line: 1
             assert_not_nil assigns :assignment
             assert_not_nil assigns :submission_file_id
             assert_not_nil assigns :focus_line
@@ -580,14 +537,19 @@ class ResultsControllerTest < AuthenticatedControllerTest
               3.times do |time|
                 g = Grouping.make(:assignment => @assignment)
                 s = Submission.make(:grouping => g)
+                student = Student.make
                 if time == 2
                   @result = s.get_latest_result
                   @result.marking_state = Result::MARKING_STATES[:complete]
                   @result.released_to_students = true
                   @result.save
                 end
+                StudentMembership.make(grouping: g,
+                                       user: student,
+                                       membership_status:
+                                         StudentMembership::STATUSES[:inviter])
               end
-              @groupings = @assignment.groupings.all(:order => 'id ASC')
+              @groupings = @assignment.groupings.order(:id)
             end
 
             should 'have two separate edit forms with correct actions for' +
@@ -597,8 +559,10 @@ class ResultsControllerTest < AuthenticatedControllerTest
               submission = original_result.submission
 
               # Create a remark result associated with the created submission.
-              remark_result = Result.make(:submission => submission)
-              submission.remark_result_id = remark_result.id
+              remark_result = Result.make(
+                submission: submission,
+                remark_request_submitted_at: Time.zone.now
+              )
               submission.save!
 
               get_as @admin,
@@ -610,11 +574,11 @@ class ResultsControllerTest < AuthenticatedControllerTest
               path_prefix = "/en/assignments/#{@assignment.id}" +
                             "/submissions/#{submission.id}/results"
               assert_select '#overall_comment_edit form[action=' +
-                            "#{path_prefix}/#{original_result.id}" +
-                            '/update_overall_comment]'
+                            "'#{path_prefix}/#{original_result.id}" +
+                            "/update_overall_comment']"
               assert_select '#overall_remark_comment_edit form[action=' +
-                            "#{path_prefix}/#{remark_result.id}" +
-                            '/update_overall_remark_comment]'
+                            "'#{path_prefix}/#{remark_result.id}" +
+                            "/update_overall_comment']"
             end
 
             should 'edit third result' do
@@ -625,7 +589,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
                      :assignment_id => 1,
                      :submission_id => 1,
                      :id => @result.id
-              assert assigns(:next_grouping)
+              assert_not_nil assigns(:next_grouping)
               next_grouping = assigns(:next_grouping)
               assert next_grouping.has_submission?
               next_result = next_grouping.current_submission_used.get_latest_result
@@ -646,8 +610,8 @@ class ResultsControllerTest < AuthenticatedControllerTest
                      :submission_id => 1,
                      :id => @result.id
 
-              assert assigns(:next_grouping)
-              assert assigns(:previous_grouping)
+              assert_not_nil assigns(:next_grouping)
+              assert_not_nil assigns(:previous_grouping)
               next_grouping = assigns(:next_grouping)
               previous_grouping = assigns(:previous_grouping)
               assert next_grouping.has_submission?
@@ -676,7 +640,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
                      :id => @result.id
 
               assert_nil assigns(:next_grouping)
-              assert assigns(:previous_grouping)
+              assert_not_nil assigns(:previous_grouping)
               previous_grouping = assigns(:previous_grouping)
               assert previous_grouping.has_submission?
               previous_result = previous_grouping.current_submission_used.get_latest_result
@@ -789,7 +753,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
             @file.expects(:filename).once.returns('filename')
             @file.expects(:retrieve_file).returns('file content')
             @file.expects(:is_supported_image?).once.returns(false)
-            @file.expects(:is_pdf?).once.returns(false)
             SubmissionFile.stubs(:find).returns(@file)
 
             get_as @admin,
@@ -940,12 +903,13 @@ class ResultsControllerTest < AuthenticatedControllerTest
             @file.expects(:get_file_type).once.returns('txt')
             SubmissionFile.any_instance.expects(:retrieve_file).once.returns('file content')
             get_as @admin,
-                    :codeviewer,
-                    :assignment_id => @assignment.id,
-                    :submission_id => 1,
-                    :id => 1,
-                    :focus_line => 1,
-                    :submission_file_id => @file.id
+                   :codeviewer,
+                   format: :js,
+                   assignment_id: @assignment.id,
+                   submission_id: 1,
+                   id: 1,
+                   focus_line: 1,
+                   submission_file_id: @file.id
 
             assert_equal true, flash.empty?
             assert_not_nil assigns :assignment
@@ -965,6 +929,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
             SubmissionFile.any_instance.expects(:retrieve_file).once.raises(Exception.new(SAMPLE_ERR_MSG))
             get_as @admin,
                    :codeviewer,
+                   format: :js,
                    :assignment_id => @assignment.id,
                    :submission_id => 1,
                    :id => 1,
@@ -1001,16 +966,15 @@ class ResultsControllerTest < AuthenticatedControllerTest
                     :full_messages).returns([SAMPLE_ERR_MSG])
 
             get_as @admin,
-                    :update_mark,
-                    :assignment_id => 1,
-                    :submission_id => 1,
-                    :id => 1,
-                    :mark_id => @mark.id,
-                    :mark => 'something'
+                   :update_mark,
+                   format: :js,
+                   assignment_id: 1,
+                   submission_id: 1,
+                   id: 1,
+                   mark_id: @mark.id,
+                   mark: 'something'
 
-            assert render_template 'mark_verify_result.rjs'
-            assert_response :success
-            # Workaround to assert that the error message made its way to the response
+            assert_response :bad_request
             assert_match Regexp.new(SAMPLE_ERR_MSG), @response.body
           end
 
@@ -1026,21 +990,19 @@ class ResultsControllerTest < AuthenticatedControllerTest
                    :id => 1,
                    :mark_id => 1,
                    :mark => 1
-            assert render_template 'shared/_handle_error.js.erb'
-            assert_response :success
-            # Workaround to assert that the error message made its way to the response
+            assert_response :bad_request
             assert_match Regexp.new(SAMPLE_ERR_MSG), @response.body
           end
 
           should 'without save error' do
             get_as @admin,
                    :update_mark,
+                   format: :js,
                    :assignment_id => 1,
                    :submission_id => 1,
                    :id => 1,
                    :mark_id => @mark.id,
                    :mark => 1
-            assert render_template 'results/marker/_update_mark.rjs'
             assert_response :success
           end
 
@@ -1057,6 +1019,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
           should 'GET on :add_extra_mark' do
             get_as @admin,
                    :add_extra_mark,
+                   format: :js,
                    :assignment_id => 1,
                    :submission_id => @submission.id,
                    :id => @submission.get_latest_result.id
@@ -1072,13 +1035,13 @@ class ResultsControllerTest < AuthenticatedControllerTest
               extra_mark.expects(:save).once.returns(false)
               post_as @admin,
                       :add_extra_mark,
+                      format: :js,
                       :assignment_id => 1,
                       :submission_id => @submission.id,
                       :id => @submission.get_latest_result.id,
                       :extra_mark => { :extra_mark => 1 }
               assert_not_nil assigns :result
               assert_not_nil assigns :extra_mark
-              assert render_template 'results/marker/add_extra_mark_error'
               assert_response :success
             end
 
@@ -1087,6 +1050,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
               @old_total_mark = @submission.get_latest_result.total_mark
               post_as @admin,
                       :add_extra_mark,
+                      format: :js,
                       :assignment_id => 1,
                       :submission_id => @submission.id,
                       :id => @submission.get_latest_result.id,
@@ -1106,7 +1070,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
           @result = Result.make
           (3..4).each do |extra_mark_value|
             @extra_mark = ExtraMark.new
-            @extra_mark.unit = ExtraMark::UNITS[:points]
+            @extra_mark.unit = ExtraMark::POINTS
             @extra_mark.result = @result
             @extra_mark.extra_mark = extra_mark_value
             assert @extra_mark.save
@@ -1115,6 +1079,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
           @old_total_mark = @result.total_mark
           get_as @admin,
                  :remove_extra_mark,
+                 format: :js,
                  :assignment_id => 1,
                  :submission_id => 1,
                  :id => @extra_mark.id
@@ -1140,21 +1105,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
           @result.reload
           assert_equal @result.overall_comment, @overall_comment
         end
-
-        should 'POST on :update_overall_remark_comment' do
-          @result = Result.make
-          @overall_comment = 'A new overall remark comment!'
-          post_as @admin,
-                  :update_overall_remark_comment,
-                  :assignment_id => 1,
-                  :submission_id => 1,
-                  :id => @result.id,
-                  :result => {:overall_comment => @overall_comment}
-
-          @result.reload
-          assert_equal @result.overall_comment, @overall_comment
-        end
-
       end
     end
   end # An authenticated and authorized admin doing a
@@ -1222,11 +1172,12 @@ class ResultsControllerTest < AuthenticatedControllerTest
         should 'GET on :update_marking_state' do
           result = Result.make
           get_as @ta,
-                  :update_marking_state,
-                  :assignment_id => 1,
-                  :submission_id => 1,
-                  :id => result.id,
-                  :marking_state => 'complete'
+                 :update_marking_state,
+                 format: :js,
+                 assignment_id: 1,
+                 submission_id: 1,
+                 id: result.id,
+                 marking_state: 'complete'
           assert_response :success
           assert_not_nil assigns :result
         end
@@ -1239,7 +1190,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
           should 'without file error' do
             @file.expects(:filename).once.returns('filename')
             @file.expects(:is_supported_image?).once.returns(false)
-            @file.expects(:is_pdf?).once.returns(false)
             @file.expects(:retrieve_file).once.returns('file content')
             SubmissionFile.stubs(:find).returns(@file)
 
@@ -1304,12 +1254,13 @@ class ResultsControllerTest < AuthenticatedControllerTest
             SubmissionFile.any_instance.expects(:retrieve_file
                       ).once.raises(Exception.new(SAMPLE_ERR_MSG))
             get_as @ta,
-                    :codeviewer,
-                    :assignment_id => @assignment.id,
-                    :submission_id => 1,
-                    :submission_file_id => @submission_file.id,
-                    :id => 1,
-                    :focus_line => 1
+                   :codeviewer,
+                   format: :js,
+                   assignment_id: @assignment.id,
+                   submission_id: 1,
+                   submission_file_id: @submission_file.id,
+                   id: 1,
+                   focus_line: 1
             assert_not_nil assigns :assignment
             assert_not_nil assigns :submission_file_id
             assert_not_nil assigns :focus_line
@@ -1331,12 +1282,13 @@ class ResultsControllerTest < AuthenticatedControllerTest
             SubmissionFile.any_instance.expects(:retrieve_file).once.returns('file content')
             SubmissionFile.stubs(:find).returns(@submission_file)
             get_as @ta,
-                    :codeviewer,
-                    :assignment_id => @assignment.id,
-                    :submission_id => 1,
-                    :submission_file_id => @submission_file.id,
-                    :id => 1,
-                    :focus_line => 1
+                   :codeviewer,
+                   format: :js,
+                   assignment_id: @assignment.id,
+                   submission_id: 1,
+                   submission_file_id: @submission_file.id,
+                   id: 1,
+                   focus_line: 1
 
             assert_not_nil assigns :assignment
             assert_not_nil assigns :submission_file_id
@@ -1358,21 +1310,21 @@ class ResultsControllerTest < AuthenticatedControllerTest
           should 'fails validation' do
             ActiveModel::Errors.any_instance.stubs(:full_messages).returns([SAMPLE_ERR_MSG])
             get_as @ta,
-                    :update_mark,
-                    :assignment_id => 1,
-                    :submission_id => 1,
-                    :id => 1,
-                    :mark_id => @mark.id,
-                    :mark => 'something'
-            assert render_template 'mark_verify_result.rjs'
-            assert_response :success
-            # Workaround to assert that the error message made its way to the response
+                   :update_mark,
+                   format: :js,
+                   assignment_id: 1,
+                   submission_id: 1,
+                   id: 1,
+                   mark_id: @mark.id,
+                   mark: 'something'
+            assert_response :bad_request
             assert_match Regexp.new(SAMPLE_ERR_MSG), @response.body
           end
 
           should 'without save error' do
             get_as @ta,
                    :update_mark,
+                   format: :js,
                    :assignment_id => 1,
                    :submission_id => 1,
                    :mark_id => @mark.id,
@@ -1396,6 +1348,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
           unmarked_result = Result.make
           get_as @ta,
                  :add_extra_mark,
+                 format: :js,
                  :assignment_id => 1,
                  :submission_id => 1,
                  :id => unmarked_result.id
@@ -1415,6 +1368,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
             extra_mark.expects(:save).once.returns(false)
             post_as @ta,
                     :add_extra_mark,
+                    format: :js,
                     :assignment_id => 1,
                     :submission_id => 1,
                     :id => @unmarked_result.id,
@@ -1430,6 +1384,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
             @old_total_mark = @unmarked_result.total_mark
             post_as @ta,
                     :add_extra_mark,
+                    format: :js,
                     :assignment_id => 1,
                     :submission_id => 1,
                     :id => @unmarked_result.id,
@@ -1449,7 +1404,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
           @result = Result.make
           (3..4).each do |extra_mark_value|
             @extra_mark = ExtraMark.new
-            @extra_mark.unit = ExtraMark::UNITS[:points]
+            @extra_mark.unit = ExtraMark::POINTS
             @extra_mark.result = @result
             @extra_mark.extra_mark = extra_mark_value
             assert @extra_mark.save
@@ -1458,6 +1413,7 @@ class ResultsControllerTest < AuthenticatedControllerTest
           @old_total_mark = @result.total_mark
           get_as @ta,
                  :remove_extra_mark,
+                 format: :js,
                  :assignment_id => 1,
                  :submission_id => 1,
                  :id => @extra_mark.id
@@ -1476,19 +1432,6 @@ class ResultsControllerTest < AuthenticatedControllerTest
           @result = Result.make
           post_as @ta,
                   :update_overall_comment,
-                  :assignment_id => 1,
-                  :submission_id => 1,
-                  :id => @result.id,
-                  :result => {:overall_comment => @overall_comment}
-          @result.reload
-          assert_equal @result.overall_comment, @overall_comment
-        end
-
-        should 'POST on :update_overall_remark_comment' do
-          @result = Result.make
-          @overall_comment = 'A new overall remark comment!'
-          post_as @ta,
-                  :update_overall_remark_comment,
                   :assignment_id => 1,
                   :submission_id => 1,
                   :id => @result.id,

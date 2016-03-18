@@ -3,7 +3,6 @@ require File.expand_path(File.join(File.dirname(__FILE__), '..', 'test_helper'))
 require File.expand_path(File.join(File.dirname(__FILE__), '..', 'blueprints', 'helper'))
 
 require 'shoulda'
-require 'mocha/setup'
 
 class GradersControllerTest < AuthenticatedControllerTest
 
@@ -13,16 +12,6 @@ class GradersControllerTest < AuthenticatedControllerTest
       @student = Student.make
     end
 
-    should 'GET on :upload_dialog' do
-      get_as @student, :upload_dialog, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'GET on :download_dialog' do
-      get_as @student, :download_dialog, :assignment_id => 1
-      assert_response :missing
-    end
-
     should 'GET on :groups_coverage_dialog' do
       get_as @student, :groups_coverage_dialog, :assignment_id => 1
       assert_response :missing
@@ -30,21 +19,6 @@ class GradersControllerTest < AuthenticatedControllerTest
 
     should 'GET on :grader_criteria_dialog' do
       get_as @student, :grader_criteria_dialog, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'GET on :populate' do
-      get_as @student, :populate, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'GET on :populate_graders' do
-      get_as @student, :populate_graders, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'GET on :populate_criteria' do
-      get_as @student, :populate_criteria, :assignment_id => 1
       assert_response :missing
     end
 
@@ -73,16 +47,6 @@ class GradersControllerTest < AuthenticatedControllerTest
       assert_response :missing
     end
 
-    should 'POST on :upload_dialog' do
-      post_as @student, :upload_dialog, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'POST on :download_dialog' do
-      post_as @student, :download_dialog, :assignment_id => 1
-      assert_response :missing
-    end
-
     should 'POST on :groups_coverage_dialog' do
       post_as @student, :groups_coverage_dialog, :assignment_id => 1
       assert_response :missing
@@ -90,21 +54,6 @@ class GradersControllerTest < AuthenticatedControllerTest
 
     should 'POST on :grader_criteria_dialog' do
       post_as @student, :grader_criteria_dialog, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'POST on :populate' do
-      post_as @student, :populate, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'POST on :populate_graders' do
-      post_as @student, :populate_graders, :assignment_id => 1
-      assert_response :missing
-    end
-
-    should 'POST on :populate_criteria' do
-      post_as @student, :populate_criteria, :assignment_id => 1
       assert_response :missing
     end
 
@@ -233,6 +182,30 @@ class GradersControllerTest < AuthenticatedControllerTest
         assert @grouping3.tas.count == 1
         assert @grouping3.tas.include? @ta3
       end
+
+      should 'gracefully handle malformed csv files' do
+        tempfile = fixture_file_upload('files/malformed.csv')
+        post_as @admin,
+                :csv_upload_grader_groups_mapping,
+                assignment_id: @assignment.id,
+                grader_mapping: tempfile
+
+        assert_response :redirect
+        assert_equal flash[:error], [I18n.t('csv.upload.malformed_csv')]
+      end
+
+      should 'gracefully handle a non csv file with a csv extension' do
+        tempfile = fixture_file_upload('files/pdf_with_csv_extension.csv')
+        post_as @admin,
+                :csv_upload_grader_groups_mapping,
+                assignment_id: @assignment.id,
+                grader_mapping: tempfile,
+                encoding: 'UTF-8'
+
+        assert_response :redirect
+        assert_equal flash[:error],
+                     [I18n.t('csv.upload.non_text_file_with_csv_extension')]
+      end
     end #groups csv upload
 
     context 'doing a POST on :csv_upload_grader_criteria_mapping' do
@@ -286,8 +259,7 @@ class GradersControllerTest < AuthenticatedControllerTest
               :grader_criteria_mapping => @ctieria_grader_map_file}
 
           assert_response :redirect
-          assert @criterion1.tas.count == 1
-          assert @criterion1.tas.include? @ta1
+          assert @criterion1.tas.count == 0 # entire row is ignored
           assert @criterion2.tas.count == 1
           assert @criterion2.tas.include? @ta1
           assert @criterion3.tas.count == 1
@@ -352,8 +324,7 @@ class GradersControllerTest < AuthenticatedControllerTest
               :grader_criteria_mapping => @ctieria_grader_map_file}
 
           assert_response :redirect
-          assert @criterion1.tas.count == 1
-          assert @criterion1.tas.include? @ta1
+          assert @criterion1.tas.count == 0 # entire row is ignored
           assert @criterion2.tas.count == 1
           assert @criterion2.tas.include? @ta1
           assert @criterion3.tas.count == 1
@@ -379,6 +350,31 @@ class GradersControllerTest < AuthenticatedControllerTest
           assert @criterion3.tas.include? @ta3
         end
       end # flexible criteria
+
+      should 'gracefully handle malformed csv files' do
+        tempfile = fixture_file_upload('files/malformed.csv')
+        post_as @admin,
+                :csv_upload_grader_criteria_mapping,
+                assignment_id: @assignment.id,
+                grader_criteria_mapping: tempfile,
+                encoding: 'UTF-8'
+
+        assert_response :redirect
+        assert_equal flash[:error], [I18n.t('csv.upload.malformed_csv')]
+      end
+
+      should 'gracefully handle a non csv file with a csv extension' do
+        tempfile = fixture_file_upload('files/pdf_with_csv_extension.csv')
+        post_as @admin,
+                :csv_upload_grader_criteria_mapping,
+                assignment_id: @assignment.id,
+                grader_criteria_mapping: tempfile,
+                encoding: 'UTF-8'
+
+        assert_response :redirect
+        assert_equal flash[:error],
+                     [I18n.t('csv.upload.non_text_file_with_csv_extension')]
+      end
     end # criteria csv upload
 
     context 'doing a GET on :download_grader_groupings_mapping' do
@@ -438,7 +434,7 @@ class GradersControllerTest < AuthenticatedControllerTest
         should 'and no graders selected' do
           post_as @admin, :global_actions, {:assignment_id => @assignment.id,
             :global_actions => 'random_assign', :current_table => 'groups_table'}
-          assert_response :success
+          assert_response 400, 'select a grader'
           @assignment.groupings do |grouping|
             assert grouping.tas == []
           end
@@ -456,7 +452,7 @@ class GradersControllerTest < AuthenticatedControllerTest
         should 'and no graders are selected, at least one grouping' do
           post_as @admin, :global_actions, {:assignment_id => @assignment.id,
             :global_actions => 'random_assign', :groupings => [@grouping1], :current_table => 'groups_table'}
-          assert_response :success
+          assert_response 400, 'select a grader'
           @assignment.groupings do |grouping|
             assert grouping.tas == []
           end
@@ -536,7 +532,7 @@ class GradersControllerTest < AuthenticatedControllerTest
         should 'and no graders selected' do
           post_as @admin, :global_actions, {:assignment_id => @assignment.id,
             :global_actions => 'assign', :current_table => 'groups_table'}
-          assert_response :success
+          assert_response 400, 'select a grader'
           @assignment.groupings do |grouping|
             assert grouping.tas == []
           end
@@ -554,7 +550,7 @@ class GradersControllerTest < AuthenticatedControllerTest
         should 'and no graders are selected, at least one grouping' do
           post_as @admin, :global_actions, {:assignment_id => @assignment.id,
             :global_actions => 'assign', :groupings => [@grouping1], :current_table => 'groups_table'}
-          assert_response :success
+          assert_response 400, 'select a grader'
           @assignment.groupings do |grouping|
             assert grouping.tas == []
           end
@@ -665,7 +661,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           post_as @admin, :global_actions, {:assignment_id => @assignment.id,
             :global_actions => 'unassign',
             :current_table => 'groups_table'}
-          assert_response :success
+          assert_response 400, 'select a grader'
           assert @grouping1.tas == [@ta1]
           assert @grouping2.tas == [@ta2]
           assert @grouping3.tas == []
@@ -725,8 +721,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           post_as @admin, :global_actions,
                   assignment_id: @assignment.id,
                   global_actions: 'unassign',
-                  groupings: [@grouping2],
-                  grader_memberships: ta_membership,
+                  grader_memberships: [ta_membership],
                   current_table: 'groups_table'
           assert_response :success
           assert !@grouping2.tas.include?(@ta1)
@@ -782,7 +777,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders selected' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'random_assign', :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -800,7 +795,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders are selected, at least one criterion' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'random_assign', :criteria => [@criterion1], :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -880,7 +875,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders selected' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'assign', :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -898,7 +893,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders are selected, at least one criterion' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'assign', :criteria => [@criterion1], :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -1013,7 +1008,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'unassign',
               :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @criterion1.reload
             @criterion2.reload
             @criterion3.reload
@@ -1032,8 +1027,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions,
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
-                    criteria: [@criterion1],
-                    criterion_graders: criterion_tas,
+                    criterion_associations: criterion_tas,
                     current_table: 'criteria_table'
             assert_response :success
             @criterion1.reload
@@ -1055,8 +1049,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions,
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
-                    criteria: [@criterion1, @criterion2, @criterion3],
-                    criterion_graders: criterion_tas,
+                    criterion_associations: criterion_tas,
                     current_table: 'criteria_table'
             assert_response :success
             @criterion1.reload
@@ -1084,8 +1077,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions,
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
-                    criteria: [@criterion2],
-                    criterion_graders: criterion_ta,
+                    criterion_associations: [criterion_ta],
                     current_table: 'criteria_table'
             assert_response :success
             assert !@criterion2.tas.include?(@ta1)
@@ -1117,8 +1109,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions,
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
-                    criteria: [@criterion1, @criterion2, @criterion3],
-                    criterion_graders: criterion_tas,
+                    criterion_associations: criterion_tas,
                     current_table: 'criteria_table'
             assert_response :success
             assert @criterion1.tas == []
@@ -1147,7 +1138,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders selected' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'random_assign', :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -1165,7 +1156,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders are selected, at least one criterion' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'random_assign', :criteria => [@criterion1], :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -1245,7 +1236,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders selected' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'assign', :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -1263,7 +1254,7 @@ class GradersControllerTest < AuthenticatedControllerTest
           should 'and no graders are selected, at least one criterion' do
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'assign', :criteria => [@criterion1], :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @assignment.get_criteria do |criterion|
               assert criterion.tas == []
             end
@@ -1376,7 +1367,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions, {:assignment_id => @assignment.id,
               :global_actions => 'unassign',
               :current_table => 'criteria_table'}
-            assert_response :success
+            assert_response 400, 'select a grader'
             @criterion1.reload
             @criterion2.reload
             @criterion3.reload
@@ -1395,8 +1386,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions,
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
-                    criteria: [@criterion1],
-                    criterion_graders: criterion_tas,
+                    criterion_associations: criterion_tas,
                     current_table: 'criteria_table'
             assert_response :success
             @criterion1.reload
@@ -1418,8 +1408,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions,
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
-                    criteria: [@criterion1, @criterion2, @criterion3],
-                    criterion_graders: criterion_tas,
+                    criterion_associations: criterion_tas,
                     current_table: 'criteria_table'
             assert_response :success
             @criterion1.reload
@@ -1448,7 +1437,7 @@ class GradersControllerTest < AuthenticatedControllerTest
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
                     criteria: [@criterion2],
-                    criterion_graders: criterion_ta,
+                    criterion_associations: [criterion_ta],
                     current_table: 'criteria_table'
             assert_response :success
             @criterion2.reload
@@ -1481,8 +1470,7 @@ class GradersControllerTest < AuthenticatedControllerTest
             post_as @admin, :global_actions,
                     assignment_id: @assignment.id,
                     global_actions: 'unassign',
-                    criteria: [@criterion1, @criterion2, @criterion3],
-                    criterion_graders: criterion_tas,
+                    criterion_associations: criterion_tas,
                     current_table: 'criteria_table'
             assert_response :success
             assert @criterion1.tas == []

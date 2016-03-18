@@ -3,7 +3,6 @@ require File.expand_path(File.join(File.dirname(__FILE__), '..', 'test_helper'))
 require File.expand_path(File.join(File.dirname(__FILE__), '..', 'blueprints', 'helper'))
 
 require 'shoulda'
-require 'mocha/setup'
 
 class MarksGradersControllerTest < AuthenticatedControllerTest
   # Test that graders and students can't access this feature
@@ -41,7 +40,9 @@ class MarksGradersControllerTest < AuthenticatedControllerTest
       @graders = []
 
       5.times do
-        @students << Student.make
+        s = Student.make
+        GradeEntryStudent.make(user: s, grade_entry_form: @grade_entry_form)
+        @students << s
         @graders << Ta.make
       end
     end
@@ -99,7 +100,8 @@ class MarksGradersControllerTest < AuthenticatedControllerTest
 
     should 'download a csv on GET :download_grader_students_mapping' do
       entry_students = @grade_entry_form.grade_entry_students
-      entry_student  = entry_students.find_or_create_by_user_id(@students[0].id)
+      entry_student = entry_students.find_or_create_by(
+        user_id: @students[0].id)
       entry_student.add_tas([@graders[0], @graders[1]])
 
       # Build expected csv output
@@ -158,19 +160,47 @@ class MarksGradersControllerTest < AuthenticatedControllerTest
     should 'be able to remove a grader from a student on POST :global_actions' do
       # Add a grader to a student
       entry_students = @grade_entry_form.grade_entry_students
-      grade_entry_student = entry_students.find_or_create_by_user_id(@students[0].id)
+      grade_entry_student = entry_students.find_or_create_by(
+        user_id: @students[0].id)
       grade_entry_student.add_tas(@graders[0])
+      gest_ids = grade_entry_student.grade_entry_student_tas.pluck(:id)
 
       remove = "#{@students[0].id}_#{@graders[0].user_name}".to_sym
-      post_as @admin, :global_actions, { :grade_entry_form_id => @grade_entry_form.id,
-        :global_actions => 'unassign', :students => [@students[0]],
-        remove => true, :submit_type => 'global_action',
-        :current_table => 'groups_table' }
+      post_as @admin, :global_actions,
+              grade_entry_form_id: @grade_entry_form.id,
+              global_actions: 'unassign',
+              students: [@students[0]],
+              submit_type: 'global_action',
+              current_table: 'groups_table',
+              gests: gest_ids
 
       assert_nil flash[:error]
       assert_equal 0, @graders[0].get_membership_count_by_grade_entry_form(@grade_entry_form)
       assert_equal 0, entry_students.find_by_user_id(@students[0].id).tas.length
     end
 
+    should 'gracefully handle malformed csv files' do
+      tempfile = fixture_file_upload('files/malformed.csv')
+      post_as @admin,
+              :csv_upload_grader_groups_mapping,
+              grade_entry_form_id: @grade_entry_form.id,
+              grader_mapping: tempfile
+
+      assert_response :redirect
+      assert_equal flash[:error], [I18n.t('csv.upload.malformed_csv')]
+    end
+
+    should 'gracefully handle a non csv file with a csv extension' do
+      tempfile = fixture_file_upload('files/pdf_with_csv_extension.csv')
+      post_as @admin,
+              :csv_upload_grader_groups_mapping,
+              grade_entry_form_id: @grade_entry_form.id,
+              grader_mapping: tempfile,
+              encoding: 'UTF-8'
+
+      assert_response :redirect
+      assert_equal flash[:error],
+                   [I18n.t('csv.upload.non_text_file_with_csv_extension')]
+    end
   end # admin context
 end

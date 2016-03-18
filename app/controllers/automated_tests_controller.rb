@@ -23,8 +23,9 @@ class AutomatedTestsController < ApplicationController
       Process.detach(child_pid) unless child_pid.nil?
     end
     render :test_replace,
-           locals: {test_result_files: @test_result_files,
-                       result: @result}
+           format: :js,
+           locals: { test_result_files: @test_result_files,
+                     result: @result }
   end
 
 
@@ -37,7 +38,7 @@ class AutomatedTestsController < ApplicationController
 
         begin
           # Process testing framework form for validation
-          @assignment = process_test_form(@assignment, params)
+          @assignment = process_test_form(@assignment, assignment_params)
         rescue Exception, RuntimeError => e
           @assignment.errors.add(:base, I18n.t('assignment.error',
             message: e.message))
@@ -65,4 +66,13 @@ class AutomatedTestsController < ApplicationController
 
   end
 
+  private
+
+  def assignment_params
+    params.require(:assignment)
+          .permit(:enable_test,
+                  :assignment_id,
+                  test_files_attributes:
+                  [:id, :filename, :filetype, :is_private, :_destroy])
+  end
 end

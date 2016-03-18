@@ -2,6 +2,7 @@ class Section < ActiveRecord::Base
   validates_presence_of :name
   validates_uniqueness_of :name
   has_many :students
+  has_many :section_due_dates
 
   # Returns true when students are part of this section
   def has_students?
@@ -14,7 +15,7 @@ class Section < ActiveRecord::Base
   end
 
   def section_due_date_for(aid)
-    SectionDueDate.find_by_assignment_id_and_section_id(aid, self.id)
+    SectionDueDate.where(assignment_id: aid, section_id: id).first
   end
 
   def user_can_modify?(current_user)

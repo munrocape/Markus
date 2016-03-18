@@ -68,12 +68,13 @@ Assignment.blueprint do
   marking_scheme_type {'rubric'}
   submission_rule {NoLateSubmissionRule.make}
   allow_web_submits {true}
+  vcs_submit { false }
   display_grader_names_to_students {false}
   section_due_dates_type(false)
   enable_test {true}
   tokens_per_day {10}
   assign_graders_to_criteria {false}
-  assignment_stat {AssignmentStat.make}
+  assignment_stat
 end
 
 AssignmentFile.blueprint do
@@ -82,7 +83,6 @@ AssignmentFile.blueprint do
 end
 
 AssignmentStat.blueprint do
-  assignment_id {0}
 end
 
 CriterionTaAssociation.blueprint do
@@ -126,6 +126,7 @@ GradeEntryForm.blueprint do
   description
   message
   date
+  is_hidden {false}
 end
 
 GradeEntryItem.blueprint do
@@ -185,7 +186,7 @@ Note.blueprint do
   noteable_type  {'Grouping'}
   noteable_id {Grouping.make.id}
   user {Admin.make}
-  notes_message  {Faker::Lorem.paragraphs}
+  notes_message { Faker::Lorem.paragraphs[0] }
 end
 
 NoLateSubmissionRule.blueprint do
@@ -245,7 +246,6 @@ Submission.blueprint do
   submission_version_used {true}
   revision_number {1}
   revision_timestamp {1.days.ago}
-  remark_result_id {nil}
 end
 
 SubmissionFile.blueprint do
@@ -296,14 +296,17 @@ TestResult.blueprint do
 end
 
 TextAnnotation.blueprint do
-  line_start {0}
-  line_end {1}
+  line_start { 0 }
+  line_end { 1 }
+  column_start { 2 }
+  column_end { 3 }
   submission_file
-  is_remark {false}
-  annotation_text {AnnotationText.make(
-    :annotation_category => AnnotationCategory.make(:assignment => submission_file.submission.grouping.assignment)
-    )}
-  annotation_number {rand(1000)+1}
+  is_remark { false }
+  annotation_text
+      AnnotationText.make(
+          annotation_category: AnnotationCategory.make(
+              assignment: submission_file.submission.grouping.assignment))
+  annotation_number { rand(1000) + 1 }
 end
 
 Token.blueprint do

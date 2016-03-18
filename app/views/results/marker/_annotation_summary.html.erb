@@ -5,19 +5,19 @@
       <%= t('marker.annotation.remark_flag') if (annot.is_remark) %>
     </p>
     <div class='annotationContent' id='annotation_text_content_display_<%= annot.annotation_text.id %>'>
-      <%= simple_format(annot.annotation_text.content) %>
+      <%= markdown(annot.annotation_text.content) %>
     </div>
 
-    <%= button_to_function t('edit'),
-                           "jQuery('#annotation_text_content_edit_#{annot.annotation_text.id}').show();
+    <%= button_tag t('edit'),
+                   onclick: "jQuery('#annotation_text_content_edit_#{annot.annotation_text.id}').show();
                             jQuery('#annotation_text_content_display_#{annot.annotation_text.id}').hide();",
-                           { class: 'float_left edit_remove_annotation_button' } %>
+                   class: 'float_left edit_remove_annotation_button' %>
 
     <%= button_to t('remove'),
                   annotations_path(id: annot.id, submission_file_id: @submission_file_id),
                   method: :delete,
                   class: 'edit_remove_annotation_button',
-                  confirm: t('marker.annotation.sure_to_remove'),
+                  data: { confirm: t('marker.annotation.sure_to_remove') },
                   remote: true %>
 
     <div id='annotation_text_content_edit_<%= annot.annotation_text.id %>' class='annotation_text_content_editor'>
@@ -34,7 +34,7 @@
 
         <p class='manageAnnotations'>
           <%= submit_tag t('marker.annotation.submit_edit'),
-                         confirm: t('marker.annotation.change_across_submissions') %>
+                         data: { confirm: t('marker.annotation.change_across_submissions') } %>
           <input type='reset'
                  value='<%= t('cancel') %>'
                  onclick="jQuery('#annotation_text_content_edit_<%= annot.annotation_text.id %>').hide();

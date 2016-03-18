@@ -2,6 +2,11 @@
 ENV['RAILS_ENV'] ||= 'test'
 require File.expand_path('../../config/environment', __FILE__)
 require 'rspec/rails'
+# Loads lib repo stuff.
+require 'repo/repository'
+require 'repo/git_repository'
+require 'repo/subversion_repository'
+require 'database_cleaner'
 
 # Requires supporting ruby files with custom matchers and macros, etc,
 # in spec/support/ and its subdirectories.
@@ -28,6 +33,10 @@ RSpec.configure do |config|
   # Include Factory Girl syntax to simplify calls to factory.
   config.include FactoryGirl::Syntax::Methods
 
+  # Include generic helpers.
+  config.include Helpers
+  config.include AuthenticationHelper
+
   # If you're not using ActiveRecord, or you'd prefer not to run each of your
   # examples within a transaction, remove the following line or assign false
   # instead of true.
@@ -43,4 +52,23 @@ RSpec.configure do |config|
   # the seed, which is printed after each run.
   #     --seed 1234
   config.order = 'random'
+
+  # Clean up any created file folders
+  config.after(:each) do
+    FileUtils.rm_rf(Dir["#{Rails.root}/data/test/repos/test_repo"])
+  end
+
+  config.before(:suite) do
+    DatabaseCleaner.clean_with :truncation
+  end
+
+  RSpec::Matchers.define :same_time_within_ms do |e|
+    match do |a|
+      e.to_i == a.to_i
+    end
+  end
+
+  # Get fixture_file_upload to work with RSPEC. See http://bit.ly/1yQfoS5
+  config.include ActionDispatch::TestProcess
+  config.fixture_path = "#{::Rails.root}/spec/fixtures"
 end

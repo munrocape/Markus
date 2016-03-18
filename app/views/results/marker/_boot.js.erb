@@ -1,13 +1,14 @@
 <script>
-//<![CDATA[
   jQuery(document).ready(function() {
     // Register dropdown menus...
     <% if !@result.released_to_students %>
       setup_annotation_categories();
     <% end %>
 
-    // Create the modal dialog
-    modal = new ModalMarkus('#create_annotation_dialog');
+    // Create the modal dialogs
+    modal                     = new ModalMarkus('#create_annotation_dialog');
+    window.modal_create_new   = new ModalMarkus('#create_new_tag');
+    window.modal_delete_tags  = new ModalMarkus('#delete_tags');
   });
 
   window.onload = function() {
@@ -19,5 +20,35 @@
       <% end %>
     <% end %>
   };
-//]]>
+  jQuery(document).ready(function () {
+    jQuery('#overall_remark_comment_edit form').on('ajax:success', function (data) {
+        if (jQuery('.success').length > 0) {
+            jQuery('.success').text = '<%= t("marker.overall_comments_success") %>';
+            jQuery('.success').show();
+            } else {
+            jQuery('.wrapLeft').prepend(
+                '<div class="success">' +
+                    '<%= t("marker.overall_comments_success") %>' +
+                    '</div>');
+            }
+        jQuery('#overall_remark_comment_submit').prop('disabled',true);
+        }).on('ajax:before', function () {
+        jQuery('.success').hide();
+        });
+      });
+  jQuery(document).ready(function () {
+    jQuery('#overall_comment_edit form').on('ajax:success', function (data) {
+        if (jQuery('.success').length > 0) {
+            jQuery('.success').text = '<%= t("marker.overall_comments_success") %>';
+            jQuery('.success').show();
+            } else {
+            jQuery('.wrapLeft').prepend(
+                '<div class="success">' +
+                    '<%= t("marker.overall_comments_success") %>' +
+                    '</div>');
+            }
+        }).on('ajax:before', function () {
+        jQuery('.success').hide();
+        });
+    });
 </script>

@@ -10,7 +10,7 @@ module ApplicationHelper
     # type, and :notice is the most neutral of the four
     type = :notice if !available_types.include?(type)
     # If a flash with that type doesn't exist, create a new array
-    flash[type] = [] if !flash.key?(type)
+    flash[type] ||= []
     # If the message doesn't already exist, add it
     unless flash[type].include?(text)
       flash[type].push(text)
@@ -27,5 +27,15 @@ module ApplicationHelper
     unless flash.now[type].include?(text)
       flash.now[type].push(text)
     end
+  end
+
+  def markdown(text)
+    options = { filter_html: false, hard_wrap: true,
+                link_attributes: { rel: 'nofollow', target: '_blank' },
+                space_after_headers: true, fenced_code_blocks: true }
+    extensions = { autolink: true }
+    renderer = Redcarpet::Render::HTML.new(options)
+    markdown = Redcarpet::Markdown.new(renderer, extensions)
+    return markdown.render(text).html_safe unless text.nil?
   end
 end

@@ -5,35 +5,52 @@
 # For production mode MySQL option :
 #   bundle install --without development test postgresql sqlite
 #
-# Make sure to decleare at least one 'source'
-source 'http://rubygems.org'
+# Make sure to declare at least one 'source'
+source 'https://rubygems.org'
 
 # Bundler requires these gems in all environments
-gem 'rails', '3.2.18'
+gem 'rails', '~> 4.2.0'
 gem 'rubyzip'
 gem 'ya2yaml'
 gem 'i18n'
-gem 'will_paginate'
 gem 'dynamic_form'
 gem 'exception_notification'
-gem 'minitest',"4.7.5", platforms: :ruby_20
-gem 'auto_complete'
-gem 'json'
-gem 'coffee-script'
-gem 'jquery-rails'
-gem 'prototype-rails' # FIXME: Will be needed with Rails3.1
 gem 'activerecord-import'
+gem 'auto_complete'
+gem 'best_in_place'
+gem 'coffee-script'
+gem 'git'
+gem 'rugged', '~> 0.21.4'
+gem 'gitolite'
+gem 'gitolite-rugged'
+gem 'jquery-rails'
+gem 'responders', '~> 2.0'
+gem 'sprockets', '~> 2.12.0'
+gem 'rails-html-sanitizer'
+gem 'rails-deprecated_sanitizer'
+gem 'redcarpet', '~> 3.0.0'
 
-group :assets do
-  gem 'tilt', '~> 1.3.7'
-  gem 'sass-rails',   '~> 3.2.3'
-  gem 'coffee-rails', '~> 3.2.1'
-  gem 'uglifier',     '>= 1.0.3'
-  gem 'execjs'
-  gem 'libv8'
-  gem 'therubyracer'
-end
+gem 'tilt', '~> 1.3.7'
+gem 'sass-rails',   '5.0.0.beta1'
+gem 'coffee-rails', '~> 4.0.0'
+gem 'uglifier',     '>= 1.3.0'
+gem 'execjs'
+gem 'libv8'
+gem 'therubyracer', '>= 0.11.1'
+gem 'json'
+gem 'minitest'
+gem 'autoprefixer-rails'
+gem 'resque'
 
+gem 'actionpack-action_caching'
+gem 'actionpack-page_caching', '~>1.0.0'
+gem 'actionpack-xml_parser', '~>1.0.0'
+gem 'actionview-encoded_mail_to', '~>1.0.4'
+gem 'activerecord-session_store', '~>0.1.0'
+gem 'rails-observers', '~>0.1.1'
+gem 'rails-perftest', '~>0.0.2'
+gem 'arel', '~>6.0.2'
+gem 'jbuilder', '~> 2.0'
 
 # If you are a MarkUs developer and use PostgreSQL, make sure you have
 # PostgreSQL header files installed (e.g. libpq-dev on Debian/Ubuntu).
@@ -62,34 +79,40 @@ end
 # Gems only used for development should be listed here so that they
 # are not loaded in other environments.
 group :development do
-  gem 'quiet_assets'
+  gem 'awesome_print'
   gem 'better_errors'
   gem 'binding_of_caller'
+  gem 'spring'
+  gem 'debugger', :platforms => :mri_19
+  gem 'quiet_assets'
+  gem 'bullet'
 end
 
 group :test do
-  gem 'simplecov'
-  gem 'shoulda'
+  gem 'factory_girl_rails'
   gem 'machinist', '< 2'
-  gem 'time-warp'
   gem 'mocha', require: false
   gem 'rspec-rails', '~> 3.0'
-  gem 'factory_girl_rails'
+  gem 'shoulda'
+  gem 'simplecov'
+  gem 'time-warp'
+  gem 'database_cleaner'
 end
 
 # Gems needed (wanted) for both development and test can be
 # listed here
 group :development, :test do
-  gem 'faker' # required for database seeding
-  gem 'debugger', :platforms => :mri_19
   gem 'byebug', :platforms => [:mri_20, :mri_21]
+  gem 'faker' # required for database seeding
 end
 
 # Gems not needed at runtime should go here so that MarkUs does
 # not waste time/memory loading them during boot
 group :offline do
-  gem 'rdoc'
   gem 'railroady'
+  gem 'rdoc'
+  gem 'rubocop'
+  gem 'rubocop-git'
   gem 'thin'
 end
 
@@ -98,12 +121,4 @@ end
 # group if you are using Phusion Passenger.
 group :unicorn do
   gem 'unicorn'
-end
-
-# If you want to be able to view and annotate PDF files,
-# make sure that this group is included. GhostScript has to be
-# installed for rghost to work well. You also need to set
-# the PDF_SUPPORT bool to true in the config file(s).
-group :rghost do
-  gem 'rghost', '<=0.9.3'
 end

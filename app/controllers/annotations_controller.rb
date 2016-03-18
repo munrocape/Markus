@@ -9,6 +9,7 @@ class AnnotationsController < ApplicationController
     @submission_file = SubmissionFile.find(@submission_file_id)
     submission= @submission_file.submission
     is_remark = submission.has_remark?
+
     if params[:annotation_type] == 'image'
       @annotation = ImageAnnotation.new
       @annotation.update_attributes({
@@ -18,11 +19,25 @@ class AnnotationsController < ApplicationController
         is_remark: is_remark,
         annotation_number: submission.annotations.count + 1
       })
+    elsif params[:annotation_type] == 'pdf'
+      @annotation = PdfAnnotation.new
+      @annotation.update_attributes(x1: Integer(params[:x1]),
+                                    x2: Integer(params[:x2]),
+                                    y1: Integer(params[:y1]),
+                                    y2: Integer(params[:y2]),
+                                    page: Integer(params[:page]),
+                                    submission_file_id: @submission_file_id,
+                                    is_remark: is_remark,
+                                    annotation_number: submission.annotations
+                                                                 .count + 1
+                                   )
     else
       @annotation = TextAnnotation.new
       @annotation.update_attributes({
         line_start: params[:line_start],
         line_end: params[:line_end],
+        column_start: params[:column_start],
+        column_end: params[:column_end],
         submission_file_id: @submission_file_id,
         is_remark: is_remark,
         annotation_number: submission.annotations.count + 1
@@ -46,31 +61,50 @@ class AnnotationsController < ApplicationController
     submission= @submission_file.submission
     is_remark = submission.has_remark?
     case params[:annotation_type]
-      when 'text'
-        @annotation = TextAnnotation.create({
-          line_start: params[:line_start],
-          line_end: params[:line_end],
-          annotation_text_id: @text.id,
-          submission_file_id: @submission_file_id,
-          is_remark: is_remark,
-          annotation_number: submission.annotations.count + 1
-        })
-      when 'image'
-        @annotation = ImageAnnotation.create({
-          annotation_text_id: @text.id,
-          submission_file_id: @submission_file_id,
-          x1: Integer(params[:x1]), x2: Integer(params[:x2]),
-          y1: Integer(params[:y1]), y2: Integer(params[:y2]),
-          is_remark: is_remark,
-          annotation_number: submission.annotations.count + 1
-        })
+    when 'text'
+      @annotation = TextAnnotation.create(
+        line_start: params[:line_start],
+        line_end: params[:line_end],
+        column_start: params[:column_start],
+        column_end: params[:column_end],
+        annotation_text_id: @text.id,
+        submission_file_id: @submission_file_id,
+        is_remark: is_remark,
+        annotation_number: submission.annotations.count + 1
+      )
+    when 'image'
+      @annotation = ImageAnnotation.create(
+        annotation_text_id: @text.id,
+        submission_file_id: @submission_file_id,
+        x1: Integer(params[:x1]),
+        x2: Integer(params[:x2]),
+        y1: Integer(params[:y1]),
+        y2: Integer(params[:y2]),
+        is_remark: is_remark,
+        annotation_number: submission.annotations.count + 1
+      )
+    when 'pdf'
+      @annotation = PdfAnnotation.create(
+        annotation_text_id: @text.id,
+        submission_file_id: @submission_file_id,
+        x1: Integer(params[:x1]),
+        x2: Integer(params[:x2]),
+        y1: Integer(params[:y1]),
+        y2: Integer(params[:y2]),
+        page: Integer(params[:page]),
+        is_remark: is_remark,
+        annotation_number: submission.annotations.count + 1
+      )
     end
+
     @submission = @submission_file.submission
     @annotations = @submission.annotations
   end
 
   def destroy
     @annotation = Annotation.find(params[:id])
+    @text_annotation = @annotation.annotation_text
+    @text_annotation.destroy if @text_annotation.annotation_category.nil?
     @old_annotation = @annotation.destroy
     @submission_file_id = params[:submission_file_id]
     @submission_file = SubmissionFile.find(@submission_file_id)
@@ -85,7 +119,6 @@ class AnnotationsController < ApplicationController
   end
 
   def update_annotation
-    return unless request.put?
     @content = params[:annotation_text][:content]
     @id = params[:annotation_text][:id]
     @submission_file_id = params[:annotation_text][:submission_file_id]
@@ -95,15 +128,5 @@ class AnnotationsController < ApplicationController
     @submission_file = SubmissionFile.find(@submission_file_id)
     @submission = @submission_file.submission
     @annotations = @submission.annotations
-  end
-
-  # Updates the overall comment from the annotations tab
-  def update_comment
-    return unless request.post?
-    result = Result.find(params[:result_id])
-    result.overall_comment = params[:overall_comment]
-    result.save
-    render :update do |page|
-    end
   end
 end

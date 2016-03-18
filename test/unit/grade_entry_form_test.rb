@@ -1,7 +1,6 @@
 require File.expand_path(File.join(File.dirname(__FILE__), '..', 'test_helper'))
 require File.expand_path(File.join(File.dirname(__FILE__), '..', 'blueprints', 'helper'))
 require 'shoulda'
-require 'will_paginate'
 
 # Tests for GradeEntryForms
 class GradeEntryFormTest < ActiveSupport::TestCase
@@ -31,19 +30,25 @@ class GradeEntryFormTest < ActiveSupport::TestCase
 
   # Make sure validate works appropriately when the date is valid
   def test_validate_valid_date
-    g = GradeEntryForm.new(:short_identifier => 'T1', :date => 1.day.from_now)
+    g = GradeEntryForm.new(short_identifier: 'T1',
+                           date: 1.day.from_now,
+                           is_hidden: false)
     assert g.valid?
   end
 
   # Make sure validate works appropriately when the date is invalid
   def test_validate_invalid_date
-    g = GradeEntryForm.new(:short_identifier => 'T1', :date => '2009-')
+    g = GradeEntryForm.new(short_identifier: 'T1',
+                           date: '2009-',
+                           is_hidden: false)
     assert !g.valid?
   end
 
   # Make sure that validate allows dates to be set in the past
   def test_validate_date_in_the_past
-    g = GradeEntryForm.new(:short_identifier => 'T1', :date => 1.day.ago)
+    g = GradeEntryForm.new(short_identifier: 'T1',
+                           date: 1.day.ago,
+                           is_hidden: false)
     assert g.valid?
   end
 
@@ -79,7 +84,7 @@ class GradeEntryFormTest < ActiveSupport::TestCase
 
     should 'verify the correct value is returned when the student has grades for none of the questions' do
       grade_entry_student_with_no_grades = @grade_entry_form.grade_entry_students.make
-      assert_equal(nil, grade_entry_student_with_no_grades.update_total_grade)
+      assert_equal(nil, grade_entry_student_with_no_grades.total_grade)
     end
 
     should 'verify the correct value is returned when the student has zero for all of the questions' do
@@ -88,17 +93,17 @@ class GradeEntryFormTest < ActiveSupport::TestCase
         grade_entry_student_with_all_zeros.grades.make(:grade_entry_item => grade_entry_item)
       end
 
-      assert_equal(0.0, grade_entry_student_with_all_zeros.update_total_grade)
+      assert_equal(0.0, grade_entry_student_with_all_zeros.total_grade)
     end
 
     should 'verify the correct value is returned when the student has grades for some of the questions' do
-      assert_equal(0.7, @grade_entry_student_with_some_grades.update_total_grade)
+      assert_equal(0.7, @grade_entry_student_with_some_grades.total_grade)
     end
 
     should 'when the student has grades for all of the questions' do
       @grade_entry_student_with_some_grades.grades.make(:grade_entry_item => @grade_entry_items[2],
                                                         :grade => 60.5)
-      assert_equal(61.2, @grade_entry_student_with_some_grades.update_total_grade)
+      assert_equal(61.2, @grade_entry_student_with_some_grades.total_grade)
     end
   end
 
@@ -209,85 +214,6 @@ class GradeEntryFormTest < ActiveSupport::TestCase
 
       assert_equal(70.00, @grade_entry_form.calculate_released_average())
     end
-  end
-
-  # Tests for construct_alpha_category
-  context 'Construct alphabetical category: ' do
-    setup do
-      @grade_entry_form = GradeEntryForm.make
-      @alpha_categories = Array.new(4){[]}
-    end
-
-    should 'construct the correct category when the first name is shorter than the last one' do
-      @alpha_categories = @grade_entry_form.construct_alpha_category('Berio', 'Bernstein', @alpha_categories, 0)
-      assert_equal(%w(Beri), @alpha_categories[0])
-      assert_equal(%w(Bern), @alpha_categories[1])
-    end
-
-    should 'construct the correct category when the first name is longer than the last one' do
-      @alpha_categories = @grade_entry_form.construct_alpha_category('Brown', 'Chan', @alpha_categories, 0)
-      assert_equal(%w(B), @alpha_categories[0])
-      assert_equal(%w(C), @alpha_categories[1])
-    end
-
-    should 'construct the correct category when the first name is the same length as the last one' do
-      @alpha_categories = @grade_entry_form.construct_alpha_category('Bliss', 'Brown', @alpha_categories, 0)
-      assert_equal(%w(Bl), @alpha_categories[0])
-      assert_equal(%w(Br), @alpha_categories[1])
-    end
-
-    should 'construct the correct category when the first name is identical to the last one' do
-      @alpha_categories = @grade_entry_form.construct_alpha_category('Smith', 'Smith', @alpha_categories, 0)
-      assert_equal(%w(Smith), @alpha_categories[0])
-      assert_equal(%w(Smith), @alpha_categories[1])
-    end
-  end
-
-  # Tests for the alpha_paginate algorithm
-  context 'Construct alphabetical categories: ' do
-      setup do
-        @grade_entry_form = GradeEntryForm.make
-        @students = []
-
-        last_names = %w(Albert Alwyn Auric Berio Bliss Bridge Britten Cage
-                        Dukas Duparc Egge Feldman)
-
-        (0..11).each do |i|
-          student = Student.new(:user_name => 's' + i.to_s, :last_name => last_names[i], :first_name => 'Bob')
-          student.save
-          @students << student
-        end
-      end
-
-      should 'be able to handle the case where there are 0 pages without errors' do
-        alpha_pagination_students = @grade_entry_form.alpha_paginate(@students, 12, 0)
-        assert_equal(alpha_pagination_students, [])
-      end
-
-      should 'construct the appropriate categories for alphabetical pagination when there is 1 page' do
-        alpha_pagination_students = @grade_entry_form.alpha_paginate(@students, 12, 1)
-        assert_equal('A-F', alpha_pagination_students[0])
-      end
-
-      should 'construct the appropriate categories for alphabetical pagination when there are multiple pages' do
-        alpha_pagination_students = @grade_entry_form.alpha_paginate(@students, 3, 4)
-        assert_equal('Al-Au', alpha_pagination_students[0])
-        assert_equal('Be-Brid', alpha_pagination_students[1])
-        assert_equal('Brit-Duk', alpha_pagination_students[2])
-        assert_equal('Dup-F', alpha_pagination_students[3])
-      end
-
-      should 'construct the appropriate categories for alphabetical pagination when the last page has 1 student on it' do
-        student = Student.new(:user_name => 's12', :last_name => 'Harris', :first_name => 'Bob')
-        student.save
-        @students << student
-
-        alpha_pagination_students = @grade_entry_form.alpha_paginate(@students, 4, 4)
-        assert_equal('A-Be', alpha_pagination_students[0])
-        assert_equal('Bl-C', alpha_pagination_students[1])
-        assert_equal('D-F', alpha_pagination_students[2])
-        assert_equal('Harris-Harris', alpha_pagination_students[3])
-      end
   end
 
 end

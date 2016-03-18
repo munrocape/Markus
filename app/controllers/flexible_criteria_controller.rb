@@ -4,13 +4,12 @@ class FlexibleCriteriaController < ApplicationController
 
   def index
     @assignment = Assignment.find(params[:assignment_id])
-    if @assignment.past_due_date?
+    if @assignment.past_all_due_dates?
       flash[:notice] = t('past_due_date_warning')
     end
     # TODO until Assignment gets its criteria method
     @criteria =
-      FlexibleCriterion.find_all_by_assignment_id( @assignment.id,
-                                                   order: :position)
+      FlexibleCriterion.where(assignment_id: @assignment.id).order(:position)
   end
 
   def edit
@@ -19,7 +18,8 @@ class FlexibleCriteriaController < ApplicationController
 
   def update
     @criterion = FlexibleCriterion.find(params[:id])
-    unless @criterion.update_attributes(params[:flexible_criterion])
+    unless @criterion.update_attributes(flexible_criterion_params)
+      @errors = @criterion.errors
       render :errors
       return
     end
@@ -43,7 +43,7 @@ class FlexibleCriteriaController < ApplicationController
     @criterion.assignment = @assignment
     @criterion.max = FlexibleCriterion::DEFAULT_MAX
     @criterion.position = new_position
-    unless @criterion.update_attributes(params[:flexible_criterion])
+    unless @criterion.update_attributes(flexible_criterion_params)
       @errors = @criterion.errors
       render :add_criterion_error
       return
@@ -89,6 +89,8 @@ class FlexibleCriteriaController < ApplicationController
               nb_updates: nb_updates)
           end
         end
+      rescue CSV::MalformedCSVError
+        flash[:error] = I18n.t('csv.upload.malformed_csv')
       end
     end
     redirect_to action: 'index', assignment_id: @assignment.id
@@ -115,4 +117,12 @@ class FlexibleCriteriaController < ApplicationController
     # end
   end
 
+  private
+
+  def flexible_criterion_params
+    params.require(:flexible_criterion).permit(:flexible_criterion_name,
+                                               :description,
+                                               :position,
+                                               :max)
+  end
 end

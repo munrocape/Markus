@@ -1,4 +1,3 @@
-require 'rghost'
 class SubmissionFile < ActiveRecord::Base
 
   # Only allow alphanumeric characters, '.', '-', and '_' as
@@ -9,10 +8,13 @@ class SubmissionFile < ActiveRecord::Base
   SUBSTITUTION_CHAR = '_'
 
   belongs_to  :submission
-  has_many :annotations
   validates_associated :submission
   validates_presence_of :submission
+
+  has_many :annotations
+
   validates_presence_of :filename
+
   validates_presence_of :path
 
   validates_inclusion_of :is_converted, in: [true, false]
@@ -23,23 +25,23 @@ class SubmissionFile < ActiveRecord::Base
     # SyntaxHighlighter can work with.
     case File.extname(filename)
     when '.sci'
-      return 'scilab'
+      'scilab'
     when '.java'
-      return 'java'
+      'java'
     when '.rb'
-      return 'ruby'
+      'ruby'
     when '.py'
-      return 'python'
+      'python'
     when '.js'
-      return 'javascript'
+      'javascript'
     when '.c'
-      return 'c'
-    when '.scm'
-      return 'scheme'
-    when '.ss'
-      return 'scheme'
+      'c'
+    when '.hs'
+      'haskell'
+    when '.scm', '.ss', '.rkt'
+      'scheme'
     else
-      return 'unknown'
+      'unknown'
     end
   end
 
@@ -51,15 +53,17 @@ class SubmissionFile < ActiveRecord::Base
     #the language's multiple line comment format.
     case File.extname(filename)
     when '.java', '.js', '.c'
-      return %w(/* */)
+      %w(/* */)
     when '.rb'
-      return ["=begin\n", "\n=end"]
+      ["=begin\n", "\n=end"]
     when '.py'
-      return %w(""" """)
-    when '.scm', '.ss'
-      return %w(#| |#)
+      %w(""" """)
+    when '.scm', '.ss', '.rkt'
+      %w(#| |#)
+    when '.hs'
+      %w({- -})
     else
-      return %w(## ##)
+      %w(## ##)
     end
   end
 
@@ -100,46 +104,6 @@ class SubmissionFile < ActiveRecord::Base
       end
     end
     all_annotations
-  end
-
-  def convert_pdf_to_jpg
-    return unless MarkusConfigurator.markus_config_pdf_support && self.is_pdf?
-    m_logger = MarkusLogger.instance
-    storage_path = File.join(MarkusConfigurator.markus_config_pdf_storage,
-      self.submission.grouping.group.repository_name,
-      self.path)
-    file_path = File.join(storage_path, self.filename.split('.')[0] + '.jpg')
-    self.export_file(storage_path)
-
-    # Remove any old copies of this image if they exist
-    i = 1
-    filePathToRemove = File.join(storage_path,
-                                 self.filename.split('.')[0] + '_' + sprintf('%04d' % i.to_s()) + '.jpg')
-    while File.exists?(filePathToRemove)
-      FileUtils.remove_file(filePathToRemove, true)
-      i += 1
-      filePathToRemove = File.join(storage_path,
-                                   self.filename.split('.')[0] + '_' + sprintf('%04d' % i.to_s()) + '.jpg')
-    end
-
-    # Convert a pdf file into a an array of jpg files (one jpg file = one page
-    # of the pdf file)
-    begin
-      file = RGhost::Convert.new(File.join(storage_path, self.filename))
-      results = file.to :jpeg,
-                        filename: file_path,
-                        multipage: true,
-                        resolution: 150
-
-    rescue RGhost::RenderException
-      self.is_converted = false
-      self.error_converting = true
-    else
-      self.is_converted = true
-    end
-
-    FileUtils.remove_file(File.join(storage_path, self.filename), true)
-    self.save
   end
 
   # Return the contents of this SubmissionFile.  Include annotations in the

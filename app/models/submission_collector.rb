@@ -20,8 +20,9 @@ class SubmissionCollector < ActiveRecord::Base
 
   has_many :grouping_queues, dependent: :destroy
 
-  validates_numericality_of :child_pid, only_integer: true,
-    allow_nil: true
+  validates_numericality_of :child_pid,
+                            only_integer: true,
+                            allow_nil: true
 
   validates_inclusion_of :stop_child, in: [true, false]
 
@@ -42,29 +43,34 @@ class SubmissionCollector < ActiveRecord::Base
     self.grouping_queues.create(priority_queue: true)
   end
 
+  def priority_queue
+    grouping_queues.where(priority_queue: true).first.groupings
+  end
+
+  def regular_queue
+    grouping_queues.where(priority_queue: false).first.groupings
+  end
+
   #Add all the groupings belonging to assignment to the grouping queue
   def push_groupings_to_queue(groupings)
-    priority_queue = grouping_queues.find_by_priority_queue(true).groupings
-    regular_queue = grouping_queues.find_by_priority_queue(false).groupings
-
+    priority_q = priority_queue
+    regular_q  = regular_queue
     groupings.each do |grouping|
-      unless regular_queue.include?(grouping) ||
-          priority_queue.include?(grouping)
-        grouping.is_collected = false
-        regular_queue.push(grouping)
-      end
+      next if regular_q.include?(grouping) || priority_q.include?(grouping)
+      grouping.is_collected = false
+      regular_q.push(grouping)
     end
     start_collection_process
   end
 
   def push_grouping_to_priority_queue(grouping)
-    priority_queue = grouping_queues.find_by_priority_queue(true).groupings
-    regular_queue = grouping_queues.find_by_priority_queue(false).groupings
+    priority_q = priority_queue
+    regular_q  = regular_queue
 
-    regular_queue.delete(grouping) if regular_queue.include?(grouping)
-    unless priority_queue.include?(grouping)
+    regular_q.delete(grouping) if regular_q.include?(grouping)
+    unless priority_q.include?(grouping)
       grouping.is_collected = false
-      priority_queue.push(grouping)
+      priority_q.push(grouping)
     end
     start_collection_process
   end
@@ -75,25 +81,21 @@ class SubmissionCollector < ActiveRecord::Base
     grouping.grouping_queue.groupings.delete(grouping)
     grouping.grouping_queue = nil
     grouping.save
-    return grouping
+    grouping
   end
 
   #Get the next grouping for which to collect the submission, or return nil
   #if there are no more groupings.
   def get_next_grouping_for_collection
-    priority_queue = grouping_queues.find_by_priority_queue(true).groupings
-    regular_queue = grouping_queues.find_by_priority_queue(false).groupings
-
-    current_grouping = priority_queue.first || regular_queue.first
-    return current_grouping
+    priority_queue.first || regular_queue.first
   end
 
   #Fork-off a new process resposible for collecting all submissions
   def start_collection_process
-
     #Since windows doesn't support fork, the main process will have to collect
     #the submissions.
-    if RUBY_PLATFORM =~ /(:?mswin|mingw)/ # should match for Windows only
+    # Fork is also skipped if in testing mode
+    if RUBY_PLATFORM =~ /(:?mswin|mingw)/ || Rails.env.test?
       while collect_next_submission
       end
       return
@@ -106,6 +108,7 @@ class SubmissionCollector < ActiveRecord::Base
                  ' process running')
     begin
       unless self.child_pid.nil?
+        m_logger.log("waitpid on '#{child_pid}'")
         Process.waitpid(self.child_pid, Process::WNOHANG)
         #If child is still running do nothing, otherwise reset the child_pid
         if $?.nil?
@@ -136,7 +139,6 @@ class SubmissionCollector < ActiveRecord::Base
           yield
           m_logger.log('Submission collection process done evaluating provided code block')
         end
-
         while collect_next_submission
           if SubmissionCollector.first.stop_child
             m_logger.log('Submission collection process now exiting because it was ' +
@@ -166,7 +168,7 @@ class SubmissionCollector < ActiveRecord::Base
     m_logger = MarkusLogger.instance
     m_logger.log("Now collecting: #{assignment.short_identifier} for grouping: " +
                  "'#{grouping.id}'")
-    time = assignment.submission_rule.calculate_collection_time.localtime
+    time = assignment.submission_rule.calculate_collection_time(grouping.inviter.section).localtime
     # Create a new Submission by timestamp.
     # A Result is automatically attached to this Submission, thanks to some
     # callback logic inside the Submission model
@@ -174,14 +176,7 @@ class SubmissionCollector < ActiveRecord::Base
     # Apply the SubmissionRule
     new_submission = assignment.submission_rule.apply_submission_rule(
       new_submission)
-    #convert any pdf submission files to jpgs, catching any errors
-    new_submission.submission_files.each do |subm_file|
-      subm_file.convert_pdf_to_jpg if subm_file.is_pdf?
-      if subm_file.error_converting
-        grouping.error_collecting = true
-      end
-    end
-    
+
     unless grouping.error_collecting
       grouping.is_collected = true
     end
@@ -190,23 +185,38 @@ class SubmissionCollector < ActiveRecord::Base
     grouping.save
   end
 
+  def apply_penalty_or_add_grace_credits(grouping,
+                                         apply_late_penalty,
+                                         new_submission)
+    if grouping.assignment.submission_rule.is_a? GracePeriodSubmissionRule
+      # Return any grace credits previously deducted for this grouping.
+      grouping.assignment.submission_rule.remove_deductions(new_submission)
+    end
+    if apply_late_penalty
+      grouping.assignment.submission_rule.apply_submission_rule(new_submission)
+    end
+
+  end
+
   #Use the database to communicate to the child to stop, and restart itself
   #and manually collect the submission
-  def manually_collect_submission(grouping, rev_num)
+  #The third parameter enables or disables the forking.
+  def manually_collect_submission(grouping, rev_num,
+                                  apply_late_penalty, async = true)
 
     #Since windows doesn't support fork, the main process will have to collect
     #the submissions.
-    if RUBY_PLATFORM =~ /(:?mswin|mingw)/ # should match for Windows only
+    if !async || RUBY_PLATFORM =~ /(:?mswin|mingw)/ # match for Windows
       grouping.is_collected = false
       remove_grouping_from_queue(grouping)
       grouping.save
       new_submission = Submission.create_by_revision_number(grouping, rev_num)
-      new_submission.submission_files.each do |subm_file|
-        subm_file.convert_pdf_to_jpg if subm_file.is_pdf?
-      end
+      apply_penalty_or_add_grace_credits(grouping,
+                                         apply_late_penalty,
+                                         new_submission)
       grouping.is_collected = true
       grouping.save
-      return
+      return new_submission
     end
 
     #Make the child process exit safely, to avoid both parent and child process
@@ -220,6 +230,9 @@ class SubmissionCollector < ActiveRecord::Base
     grouping.save
 
     new_submission = Submission.create_by_revision_number(grouping, rev_num)
+    apply_penalty_or_add_grace_credits(grouping,
+                                       apply_late_penalty,
+                                       new_submission)
 
     #This is to help determine the progress of the method.
     self.safely_stop_child_exited = true
@@ -228,20 +241,13 @@ class SubmissionCollector < ActiveRecord::Base
     #Let the child process handle conversion, as things go wrong when both
     #parent and child do this.
     start_collection_process do
-      if MarkusConfigurator.markus_config_pdf_support
-        new_submission.submission_files.each do |subm_file|
-          subm_file.convert_pdf_to_jpg if subm_file.is_pdf?
-        end
         grouping.is_collected = true
         grouping.save
-      end
     end
     #setting is_collected here will prevent an sqlite lockout error when pdfs
     #aren't supported
-    unless MarkusConfigurator.markus_config_pdf_support
       grouping.is_collected = true
       grouping.save
-    end
 
   end
 
